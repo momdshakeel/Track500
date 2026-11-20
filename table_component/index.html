@@ -1,1 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html,body{margin:0;padding:0;width:100%;overflow:hidden;background:transparent}
+    #table-frame{display:block;width:100%;border:0;min-height:120px}
+  </style>
+</head>
+<body>
+  <iframe id="table-frame" title="Sortable stock results"></iframe>
+  <script>
+    const frame=document.getElementById('table-frame');
+    const send=(type,data={})=>window.parent.postMessage(
+      Object.assign({isStreamlitMessage:true,type},data),'*');
+    window.addEventListener('message',event=>{
+      const msg=event.data||{};
+      if(msg.type==='streamlit:render'){
+        const args=msg.args||{};
+        frame.style.height=Math.max(120,Number(args.height)||640)+'px';
+        frame.srcdoc=args.html||'';
+        requestAnimationFrame(()=>send('streamlit:setFrameHeight',{height:Math.max(120,Number(args.height)||640)}));
+      } else if(msg.type==='marketpulse:chart-request'&&event.source===frame.contentWindow){
+        send('streamlit:setComponentValue',{
+          value:{symbol:String(msg.symbol||''),nonce:String(msg.nonce||Date.now())},
+          dataType:'json'
+        });
+      }
+    });
+    send('streamlit:componentReady',{apiVersion:1});
+  </script>
+</body>
+</html>
 
