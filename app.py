@@ -33,7 +33,7 @@ CACHE_HOURS = 6
 IST = timezone(timedelta(hours=5, minutes=30))
 LIQ_TEXT = f"avg {m.LIQUIDITY_DAYS}-day traded value ≥ ₹{m.MIN_TRADED_VALUE_CR:.0f} crore"
 
-st.set_page_config(page_title="MarketPulse 750", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Track-750", page_icon="📈", layout="wide")
 
 # Inject a stylesheet early so loading messages are themed too. The user-selected
 # font and density are restored from session state and controls appear in Settings.
