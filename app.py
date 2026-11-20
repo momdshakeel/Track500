@@ -15,6 +15,7 @@ Files in the repository: app.py, ui.py, nse500_rs_rating.py, build_data.py, requ
 """
 import os
 import sys
+from html import escape as _esc
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 
@@ -33,7 +34,7 @@ CACHE_HOURS = 6
 IST = timezone(timedelta(hours=5, minutes=30))
 LIQ_TEXT = f"avg {m.LIQUIDITY_DAYS}-day traded value ≥ ₹{m.MIN_TRADED_VALUE_CR:.0f} crore"
 
-st.set_page_config(page_title="Track-750", page_icon="📈", layout="wide")
+st.set_page_config(page_title="MarketPulse 750", page_icon="📈", layout="wide")
 
 # Inject a stylesheet early so loading messages are themed too. The user-selected
 # font and density are restored from session state and controls appear in Settings.
@@ -48,7 +49,7 @@ LATEST = os.path.join(DATA_DIR, "latest.csv")
 META = os.path.join(DATA_DIR, "meta.json")
 # Read the latest committed scan directly so the refresh button can fetch new data
 # without waiting for the app's deployed checkout to restart.
-DATA_URL = "https://raw.githubusercontent.com/momdshakeel/NiftyTotalMarket_Claude/main/data"
+DATA_URL = "https://raw.githubusercontent.com/momdshakeel/Track500/main/data"
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -747,6 +748,7 @@ def chart_base_history(history: pd.DataFrame) -> pd.DataFrame:
             "_end": dates[item["end_i"]].strftime("%Y-%m-%d"),
             "_breakout": dates[item["breakout_i"]].strftime("%Y-%m-%d"),
             "_pivot": item["pivot"],
+            "_status": item["status"], "_best": item["best"], "_now": item["now"],
         })
     return pd.DataFrame(rows)
 
@@ -772,12 +774,99 @@ def fetch_chart_payload(symbol: str, period: str) -> dict:
     }
 
 
-@st.dialog("Stock details · Technical chart", width="large")
-def show_symbol_chart_dialog(symbol: str) -> None:
+def _clear_chart_request() -> None:
+    st.session_state.pop("_symbol_chart_request", None)
+    st.session_state.pop("symbol_chart_dialog_data", None)
+
+
+def _chart_dialog(func):
+    """Open as a large dialog; closing it (x, Esc or outside click) clears the request."""
+    try:
+        return st.dialog("Stock chart", width="large", on_dismiss=_clear_chart_request)(func), True
+    except TypeError:  # older Streamlit without on_dismiss: the dialog shows its own Close button
+        return st.dialog("Stock chart", width="large")(func), False
+
+
+_DIALOG_CSS = """<style>
+div[role="dialog"] [data-testid="stVerticalBlock"]{gap:.55rem}
+.mp-dh{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.mp-sym{font-size:1.25rem;font-weight:800;letter-spacing:.01em}
+.mp-co{display:block;font-size:.8rem;opacity:.65;margin-top:1px}
+.mp-px{text-align:right;white-space:nowrap}
+.mp-px b{font-size:1.2rem;display:block;line-height:1.2}
+.mp-px span{font-size:.82rem;font-weight:700}
+.mp-up{color:#22c55e}.mp-dn{color:#ef4444}
+.mp-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mp-badges span{font-size:.74rem;font-weight:600;padding:2px 9px;border-radius:999px;
+border:1px solid color-mix(in srgb,currentColor 18%,transparent);background:color-mix(in srgb,currentColor 6%,transparent)}
+.mp-bh{padding:7px 0;border-bottom:1px solid color-mix(in srgb,currentColor 12%,transparent)}
+.mp-bh:last-child{border-bottom:0}
+.mp-bh1{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.86rem}
+.mp-bh1 span{font-weight:700;white-space:nowrap}
+.mp-bh2{font-size:.76rem;opacity:.65;margin-top:2px}
+@media(max-width:560px){.mp-sym{font-size:1.1rem}.mp-px b{font-size:1.05rem}.mp-co{font-size:.74rem}}
+</style>"""
+
+
+def _num(row, key, default=None):
+    """Read a numeric field from a scan row, returning `default` for missing / NaN values."""
+    try:
+        value = float(row.get(key))
+    except (TypeError, ValueError):
+        return default
+    return default if value != value else value
+
+
+def _dialog_header(symbol, row, latest, change, benchmark) -> str:
+    company = _esc(str(row.get("Company Name", ""))) if row is not None else ""
+    sector = _esc(str(row.get("Sector", ""))) if row is not None else ""
+    sub = " · ".join(x for x in (company, sector) if x and x.lower() != "nan")
+    cls = "mp-up" if change >= 0 else "mp-dn"
+    badges = []
+    if row is not None:
+        rs = _num(row, "RS_Rating")
+        if rs is not None:
+            badges.append(f"RS {int(rs)}")
+        stage = str(row.get("Stage", "") or "")
+        if stage and stage != "nan":
+            badges.append(_esc(stage))
+        tt = _num(row, "TT_Score")
+        if tt is not None:
+            badges.append(f"TT {int(tt)}/8")
+        off_high = _num(row, "Pct_From_52W_High")
+        if off_high is not None:
+            badges.append(f"{off_high:+.1f}% from 52W high")
+    badges.append("RS vs " + {"^CRSLDX": "Nifty 500", "^NSEI": "Nifty 50"}.get(benchmark, "index n/a"))
+    chips = "".join(f"<span>{b}</span>" for b in badges)
+    return (f'<div class="mp-dh"><div><span class="mp-sym">{_esc(symbol)}</span>'
+            f'<span class="mp-co">{sub}</span></div>'
+            f'<div class="mp-px"><b>₹{latest["close"]:,.2f}</b>'
+            f'<span class="{cls}">{"▲" if change >= 0 else "▼"} {abs(change):.2f}%</span></div></div>'
+            f'<div class="mp-badges">{chips}</div>')
+
+
+def _base_history_html(records) -> str:
+    """Responsive two-line rows (dates + outcome / depth, volume, peak) instead of a wide table."""
+    items = []
+    for r in records:
+        status = r.get("_status")
+        if status is None:
+            continue
+        holding = status == "Holding"
+        cls = "mp-up" if holding else "mp-dn"
+        icon = "▲" if r["_now"] >= 0 else "▼"
+        items.append(
+            '<div class="mp-bh"><div class="mp-bh1"><b>'
+            f'{_esc(str(r["Started"]))} → {_esc(str(r["Breakout"]))}</b>'
+            f'<span class="{cls}">{icon} {_esc(status)} {r["_now"]:+.0f}%</span></div>'
+            f'<div class="mp-bh2">Depth {_esc(str(r["Depth"]))} · Volume {_esc(str(r["Volume"]))}'
+            f' · Peak {r["_best"]:+.0f}% after breakout</div></div>')
+    return "".join(items)
+
+
+def _show_symbol_chart_dialog(symbol: str) -> None:
     symbol = str(symbol).strip().upper()
-    periods = ["1y", "2y", "5y"]
-    period_key = f"symbol_chart_period_{symbol}"
-    period = st.selectbox("Chart history", periods, index=0, key=period_key)
+    period = "5y"  # fetched once; the range buttons inside the chart only zoom
     payload = st.session_state.get("symbol_chart_dialog_data")
     if not payload or payload.get("symbol") != symbol or payload.get("period") != period:
         try:
@@ -786,71 +875,71 @@ def show_symbol_chart_dialog(symbol: str) -> None:
             st.session_state["symbol_chart_dialog_data"] = payload
         except Exception as exc:
             st.error(f"Could not load chart history: {exc}")
-            if st.button("Close", key=f"close_chart_error_{symbol}"):
-                st.session_state.pop("_symbol_chart_request", None)
+            if not _DIALOG_HAS_DISMISS and st.button("Close", key=f"close_chart_error_{symbol}"):
+                _clear_chart_request()
                 st.rerun()
             return
     bars = payload["bars"]
     if not bars:
         st.info("No daily history is available for this symbol.")
         return
+    st.markdown(_DIALOG_CSS, unsafe_allow_html=True)
     row_match = result[result["Symbol"].astype(str) == symbol]
     row = row_match.iloc[0] if not row_match.empty else None
-    company = str(row.get("Company Name", "")) if row is not None else ""
-    sector = str(row.get("Sector", "")) if row is not None else ""
-    st.markdown(f"### {symbol}　<span style='font-weight:400;opacity:.7'>{company} · {sector}</span>", unsafe_allow_html=True)
     latest = bars[-1]
     prior = bars[-2]["close"] if len(bars) > 1 else latest["close"]
-    change = (latest["close"] / prior - 1) * 100 if prior else 0
-    stats = st.columns(4)
-    stats[0].metric("Latest close", f"₹{latest['close']:,.2f}", f"{change:+.2f}%")
-    stats[1].metric("RS rating", str(row.get("RS_Rating", "—")) if row is not None else "—")
-    stats[2].metric("Stage", str(row.get("Stage", "—")) if row is not None else "—")
-    stats[3].metric("RS benchmark", {"^CRSLDX": "Nifty 500", "^NSEI": "Nifty 50 fallback"}.get(payload["benchmark"], "Unavailable"))
+    change = (latest["close"] / prior - 1) * 100 if prior else 0.0
+    st.markdown(_dialog_header(symbol, row, latest, change, payload["benchmark"]), unsafe_allow_html=True)
+    chart_slot = st.container()   # filled below, once the base / pivot inputs are known
+
     as_of = datetime.strptime(payload["dates"][-1], "%Y-%m-%d").date()
     suggested_start = datetime.strptime(payload["dates"][max(0, len(payload["dates"]) - 61)], "%Y-%m-%d").date()
     first_day = datetime.strptime(payload["dates"][0], "%Y-%m-%d").date()
-    start_key, end_key = f"dialog_base_start_{symbol}_{period}", f"dialog_base_end_{symbol}_{period}"
+    start_key, end_key = f"dialog_base_start_{symbol}", f"dialog_base_end_{symbol}"
     st.session_state.setdefault(start_key, suggested_start)
     st.session_state.setdefault(end_key, as_of)
     start_saved = max(first_day, min(st.session_state[start_key], as_of))
     end_saved = max(start_saved, min(st.session_state[end_key], as_of))
     st.session_state[start_key], st.session_state[end_key] = start_saved, end_saved
-    controls = st.columns([1, 1, 1.15, 1.3])
-    with controls[0]:
-        base_start = st.date_input("Base start", min_value=first_day, max_value=as_of, key=start_key)
-    with controls[1]:
-        base_end = st.date_input("Base end", min_value=base_start, max_value=as_of, key=end_key)
-    start_text, end_text = base_start.isoformat(), base_end.isoformat()
-    base_bars = [bar for bar in bars if start_text <= bar["date"] <= end_text]
-    if not base_bars:
-        st.warning("Choose dates that contain chart candles.")
-        return
-    default_pivot = max(bar["high"] for bar in base_bars)
-    pivot_key = f"dialog_pivot_{symbol}_{period}_{start_text}_{end_text}"
-    with controls[2]:
-        pivot = st.number_input("Pivot price", min_value=0.0, value=float(default_pivot),
-                                step=max(default_pivot * .01, .05), format="%.2f", key=pivot_key)
-    depth = (default_pivot - min(bar["low"] for bar in base_bars)) / default_pivot * 100
-    with controls[3]:
-        st.metric("Selected base depth", f"{depth:.1f}%")
-    visible = st.selectbox("Chart range", ["3M", "6M", "1Y", "2Y", "5Y"],
-                           index={"1y": 2, "2y": 3, "5y": 4}[period], key=f"dialog_visible_{symbol}_{period}")
-    ui.chart_explorer(bars, symbol, start_text, end_text, pivot,
-                      payload["base_history"], visible_window=visible)
-    st.markdown("#### Base history · last 12 months")
-    history_table = pd.DataFrame(payload["base_history"])
-    if history_table.empty:
-        st.info("No completed bases matching the rolling history rule were found.")
-    else:
-        st.dataframe(history_table[["Base", "Started", "Length", "Depth", "Pivot", "Breakout", "Volume", "Then"]],
-                     hide_index=True, use_container_width=True)
-        st.caption("Historical base/breakout labels are rolling OHLCV estimates, not a forecast.")
-    st.caption(f"Prices through {as_of:%d %b %Y} · Yahoo Finance · session-only data; nothing is saved to project files.")
-    if st.button("Close chart", key=f"close_chart_dialog_{symbol}"):
-        st.session_state.pop("_symbol_chart_request", None)
-        st.session_state.pop("symbol_chart_dialog_data", None)
+
+    with st.expander("Base & pivot markers", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            base_start = st.date_input("Base start", min_value=first_day, max_value=as_of, key=start_key)
+        with c2:
+            base_end = st.date_input("Base end", min_value=base_start, max_value=as_of, key=end_key)
+        start_text, end_text = base_start.isoformat(), base_end.isoformat()
+        base_bars = [bar for bar in bars if start_text <= bar["date"] <= end_text]
+        if base_bars:
+            default_pivot = max(bar["high"] for bar in base_bars)
+            with c3:
+                pivot = st.number_input("Pivot price", min_value=0.0, value=float(default_pivot),
+                                        step=max(default_pivot * .01, .05), format="%.2f",
+                                        key=f"dialog_pivot_{symbol}_{start_text}_{end_text}")
+            depth = (default_pivot - min(bar["low"] for bar in base_bars)) / default_pivot * 100
+            st.caption(f"Selected base depth **{depth:.1f}%** · {len(base_bars)} sessions")
+        else:
+            st.warning("Choose dates that contain chart candles.")
+            pivot = max(bar["high"] for bar in bars[-60:])
+
+    with chart_slot:
+        ui.chart_explorer(bars, symbol, start_text, end_text, pivot,
+                          payload["base_history"], visible_window="1Y")
+
+    with st.expander("Base history · last 12 months", expanded=False):
+        history_html = _base_history_html(payload["base_history"])
+        if not history_html:
+            st.info("No completed bases matching the rolling history rule were found.")
+        else:
+            st.markdown(history_html, unsafe_allow_html=True)
+            st.caption("Dates run from base start to breakout. Rolling OHLCV estimates, not a forecast.")
+    st.caption(f"Prices through {as_of:%d %b %Y} · Yahoo Finance · session-only data, nothing is saved to project files.")
+    if not _DIALOG_HAS_DISMISS and st.button("Close chart", key=f"close_chart_dialog_{symbol}"):
+        _clear_chart_request()
         st.rerun()
+
+
+show_symbol_chart_dialog, _DIALOG_HAS_DISMISS = _chart_dialog(_show_symbol_chart_dialog)
 
 
 SCREEN_LIBRARY = {
@@ -1035,11 +1124,7 @@ elif active_screen == "chart":
         st.session_state[start_key] = saved_start
         st.session_state[end_key] = saved_end
         range_default = {"1y": "1Y", "2y": "2Y", "5y": "5Y"}.get(chart_period, "2Y")
-        range_key = f"chart_visible_range_{chart_symbol}_{chart_period}"
-        if range_key not in st.session_state:
-            st.session_state[range_key] = range_default
-        visible_window = st.selectbox("Chart range", ["3M", "6M", "1Y", "2Y", "5Y"],
-                                      key=range_key, help="Changes the displayed candles only; data is not downloaded again.")
+        visible_window = range_default  # initial zoom; the chart has its own range buttons
         marks = st.columns([1, 1, 1.15, 1.3])
         with marks[0]:
             base_start = st.date_input("Base start", min_value=first_day, max_value=last_day, key=start_key)

@@ -323,26 +323,11 @@ tbody tr:nth-child(even) td:first-child{background:color-mix(in srgb,var(--fg) 3
 a.sym{color:var(--accent);font-weight:700;text-decoration:none}
 a.sym:hover{text-decoration:underline}
 .symcell{display:inline-flex;align-items:center;gap:6px}
-.info-btn{width:18px;height:18px;padding:0;border:1px solid var(--line);border-radius:50%;
-background:var(--soft);color:var(--accent);font:700 11px/16px var(--ff);cursor:pointer}
+.info-btn{position:relative;flex:none;width:20px;height:20px;padding:0;border:1px solid var(--line);border-radius:50%;
+background:var(--soft);color:var(--accent);font:700 11px/18px var(--ff);cursor:pointer}
+.info-btn::after{content:"";position:absolute;inset:-8px}
+@media(pointer:coarse){.info-btn{width:24px;height:24px;line-height:22px}.info-btn::after{inset:-10px}}
 .info-btn:hover{background:var(--accent);color:#fff}
-.overlay{display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:14px}
-.dialog{position:relative;width:min(760px,100%);max-height:94vh;overflow:auto;padding:20px;
-background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.28)}
-.close-btn{position:absolute;right:14px;top:10px;border:0;background:transparent;color:var(--fg);font-size:24px;cursor:pointer}
-.dhead{display:flex;align-items:center;gap:12px;padding-right:28px;margin-bottom:16px}
-.dhead h2{margin:0;font-size:1.35rem}.dsub{font-size:.84rem;opacity:.68}
-.dprice{margin-left:auto;text-align:right;font-size:1.25rem;font-weight:700;white-space:nowrap}
-.positive{color:var(--g)}.negative{color:var(--r)}
-.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:12px 0 18px}
-.metric,.section{border:1px solid var(--line);border-radius:11px;padding:10px}
-.metric .label{font-size:.7rem;opacity:.65;text-transform:uppercase;letter-spacing:.04em}
-.metric .value{font-size:1.08rem;font-weight:700;margin-top:5px}
-.section{margin-top:12px}.section h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px;opacity:.72}
-.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;font-size:.84rem}
-.check{display:flex;gap:7px;align-items:flex-start}.check b{font-size:1rem;line-height:1}
-.tags{display:flex;gap:7px;flex-wrap:wrap}.tag{border-radius:7px;padding:4px 8px;background:var(--soft);font-size:.78rem}
-@media(max-width:560px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.checks{grid-template-columns:1fr}.dialog{padding:16px}.dhead{align-items:flex-start;flex-wrap:wrap}.dprice{margin-left:0}}
 .ell{display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
 color:color-mix(in srgb,var(--fg) 70%,var(--bg))}
 .badge{display:inline-block;min-width:38px;text-align:center;padding:2px 9px;border-radius:999px;font-weight:700}
@@ -381,14 +366,11 @@ background:var(--bg);color:var(--fg);font:inherit;outline:none}
 .searchbar input:focus{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
 .count{font-size:.82rem;opacity:.65;white-space:nowrap}
 @media (max-width:620px){td,th{padding:0 8px}html,body{font-size:12.5px}}
-@media (max-width:560px){.overlay{padding:0}.dialog{width:100%;height:100%;max-height:100vh;border:0;border-radius:0;padding:16px 12px}}
 @media (max-width:420px){.searchbar{gap:6px}.searchbar input{font-size:16px;padding:9px}.count{font-size:.72rem}}
 </style></head><body>
 <div class="searchbar" id="searchbar" style="display:none"><input id="search" type="search" autocomplete="off">
 <span class="count" id="count"></span></div>
 <div class="wrap"><table><thead id="h"></thead><tbody id="b"></tbody></table></div>
-<div class="overlay" id="overlay" role="dialog" aria-modal="true" onclick="if(event.target===this)closeDetails()">
-<div class="dialog"><button class="close-btn" type="button" aria-label="Close" onclick="closeDetails()">×</button><div id="detail"></div></div></div>
 <script>
 const P=__PAYLOAD__;
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -397,15 +379,6 @@ const sg=(v,d,suf)=>v==null?'<span class="faint">–</span>':'<span class="'+(v>
 let sk=P.sort[0],sd=P.sort[1];
 const pc=c=>(c.pri==2?'p2':c.pri==3?'p3':'')+(c.left?' l':'');
 let query='';
-const DETAIL_TT=[
-  ['TT1_>150&200SMA','Price > 150 & 200 SMA'],['TT2_150>200SMA','150 SMA > 200 SMA'],
-  ['TT3_200SMA_up','200 SMA rising'],['TT4_50>150&200SMA','50 SMA > 150 & 200 SMA'],
-  ['TT5_>50SMA','Price > 50 SMA'],['TT6_30%>52wLow','At least 30% above 52-week low'],
-  ['TT7_within25%_52wHigh','Within 25% of 52-week high'],['TT8_RS>=70','RS rating ≥ 70']
-];
-const val=(d,k)=>d[k]==null?'–':d[k];
-const num=(d,k,digits=1,suffix='')=>d[k]==null?'–':Number(d[k]).toFixed(digits)+suffix;
-function closeDetails(){document.getElementById('overlay').style.display='none';}
 function cell(c,r){
   const v=r[c.k],k='<td class="'+pc(c)+'">';
   switch(c.type){
@@ -475,22 +448,9 @@ def table(df, keys, sort, font="Inter", density="Comfortable",
     data = json.loads(df[[c["k"] for c in cols]].to_json(orient="records")) if len(df) else []
     search_rows = (df[search_keys].fillna("").astype(str).values.tolist()
                    if search_keys and len(df) else [])
-    detail_keys = [k for k in ["Symbol", "Company Name", "Sector", "Close", "Chg_1D_%", "RS_Rating",
-                    "RS_Change", "Stage", "TT_Score", "Vol_x_50d", "Pct_From_52W_High", "RSI14",
-                    "Weighted_Return_%", "Avg_Value_Cr", "TT1_>150&200SMA", "TT2_150>200SMA",
-                    "TT3_200SMA_up", "TT4_50>150&200SMA", "TT5_>50SMA", "TT6_30%>52wLow",
-                    "TT7_within25%_52wHigh", "TT8_RS>=70", "VCP_Setup", "Vol_Breakout",
-                    "Stage1_Base", "RS_Blue_Dot", "Base_Forming", "Base_Days", "Base_Depth_%",
-                    "Trend_State", "RS_Excess_3M_%", "RS_Excess_6M_%", "RS_Improving",
-                    "Volume_Pressure_20D", "Up_Down_Vol_Ratio_20D", "Pct_Above_50SMA",
-                    "Extension_State", "Sector_Rank", "Sector_Strength"]
-                    if k in df.columns]
-    detail_rows = json.loads(df[detail_keys].to_json(orient="records")) if len(df) and "Symbol" in detail_keys else []
     rowh = 31 if density == "Compact" else 41
-    height = max((120 if not data else min(len(data) * rowh + 46, 640)) + 48,
-                 640 if detail_rows else 0)
-    payload = json.dumps({"cols": cols, "rows": data, "searchRows": search_rows, "details": detail_rows,
-                          "marketContext": market_context or {},
+    height = (120 if not data else min(len(data) * rowh + 46, 640)) + 48
+    payload = json.dumps({"cols": cols, "rows": data, "searchRows": search_rows,
                           "searchLabel": search_label if search_keys else "",
                           "sort": list(sort), "empty": empty}).replace("</", "<\\/")
     html = (_TABLE_HTML
@@ -519,45 +479,147 @@ def _embed(html: str, height: int) -> None:
         components.html(html, height=height, scrolling=False)
 
 
-def chart_explorer(bars, symbol: str, base_start: str, base_end: str, pivot: float,
-                   base_history=None, visible_window="2Y") -> None:
-    """Render a transient chart with RS, moving averages, volume and base overlays."""
-    spans = {"3M": 63, "6M": 126, "1Y": 252, "2Y": 504, "5Y": 1260}
-    visible_bars = bars[-spans.get(visible_window, len(bars)):]
-    first_date = visible_bars[0].get("date", "0000-00-00") if visible_bars else "0000-00-00"
-    visible_bases = [row for row in (base_history or []) if row.get("_breakout", "") >= first_date]
-    payload = json.dumps({"symbol": symbol, "bars": visible_bars, "start": base_start,
-                          "end": base_end, "pivot": float(pivot), "bases": visible_bases}).replace("</", "<\\/")
-    html = r"""<!doctype html><html><head><meta charset="utf-8">
+_KLINE_SRC = "https://cdn.jsdelivr.net/npm/klinecharts@10.1.1/dist/umd/klinecharts.min.js"
+
+_CHART_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-html,body{margin:0;background:#fff;color:#243042;font-family:Inter,Arial,sans-serif}
-#toolbar{display:flex;gap:6px;align-items:center;padding:6px 9px;border:1px solid #dbe1e9;border-bottom:0;border-radius:12px 12px 0 0;font-size:12px;flex-wrap:wrap}
-#toolbar b{margin-right:auto;color:#334155}#toolbar span{padding:4px 8px;border:1px solid #dbe1e9;border-radius:6px;background:#fff}
-#chart{height:575px;width:100%;min-width:320px;border:1px solid #dbe1e9;border-radius:0 0 12px 12px;overflow:hidden}
-.hint{font-size:11px;color:#788394;padding:5px 8px}
-</style></head><body><div id="toolbar"><b>__SYMBOL__ · NSE</b><span>Daily</span><span>Candles</span><span>EMA 10</span><span>EMA 21</span><span>SMA 50</span><span>SMA 200</span><span>RS vs index</span><span>Volume</span></div><div id="chart"></div><div class="hint">Daily adjusted candles · Base dates and pivot are user marked. Drag to pan; scroll or pinch to zoom.</div>
-<script src="https://cdn.jsdelivr.net/npm/klinecharts@10.1.1/dist/umd/klinecharts.min.js"></script>
+:root{--fg:#243042;--bg:#fff;--accent:#6366f1;--line:rgba(36,48,66,.16);--soft:rgba(36,48,66,.07)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+font:12.5px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+body{display:flex;flex-direction:column;gap:6px}
+#bar{display:flex;align-items:center;gap:8px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding:1px 0}
+#bar::-webkit-scrollbar{display:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.seg button{border:0;background:transparent;color:inherit;font:inherit;font-weight:600;padding:5px 10px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:#fff}
+.chip{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+background:transparent;color:inherit;font:inherit;padding:4px 10px;cursor:pointer;opacity:.62}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.chip.on{opacity:1;background:var(--soft)}
+.sp{flex:1}
+.hint{flex:none;opacity:.55;font-size:11px;cursor:help}
+#chart{flex:1;min-height:220px;width:100%;border:1px solid var(--line);border-radius:10px;overflow:hidden;touch-action:none}
+.err{padding:16px;opacity:.75}
+@media(max-width:560px){.hint{display:none}.seg button{padding:5px 8px}}
+</style></head><body>
+<div id="bar">
+ <div class="seg" id="rng"></div>
+ <button class="chip on" id="t_ema" style="--c:#f59e0b" title="Exponential averages 10 and 21"><i></i>EMA 10/21</button>
+ <button class="chip on" id="t_sma" style="--c:#3b82f6" title="Simple averages 50 and 200"><i></i>SMA 50/200</button>
+ <button class="chip on" id="t_vol" style="--c:#10b981" title="Volume"><i></i>Volume</button>
+ <button class="chip on" id="t_rs" style="--c:#ec4899" title="Price relative to the benchmark index"><i></i>RS line</button>
+ <span class="sp"></span>
+ <span class="hint" title="Drag to pan. Scroll or pinch to zoom.">Drag to pan · pinch to zoom</span>
+</div>
+<div id="chart"></div>
+<script src="__KLINE_SRC__"></script>
 <script>
 const P=__PAYLOAD__;
-function start(){
- if(!window.klinecharts){document.getElementById('chart').innerHTML='Chart library did not load. Check browser network access and reload.';return;}
- const rsByTime=new Map(P.bars.map(b=>[b.timestamp,b.rs]));
- try{klinecharts.registerIndicator({name:'MP_RS_LINE',shortName:'RS vs index',series:'normal',precision:2,figures:[{key:'rs',title:'RS: ',type:'line'}],calc:(data)=>data.map(k=>({rs:rsByTime.get(k.timestamp)??null}))});}catch(e){}
- const c=klinecharts.init('chart');c.setTimezone('Asia/Kolkata');
- c.setSymbol({ticker:P.symbol+' · NSE',pricePrecision:2,volumePrecision:0});c.setPeriod({span:1,type:'day'});c.setLocale('en-US');
- c.setDataLoader({getBars:({callback})=>callback(P.bars)});
- c.createIndicator({name:'EMA',calcParams:[10,21],paneId:'candle_pane'},true);
- c.createIndicator({name:'MA',calcParams:[50,200],paneId:'candle_pane'},true);
- c.createIndicator('VOL');c.createIndicator('MP_RS_LINE');
- const ts=s=>{const a=s.split('-').map(Number);return Date.UTC(a[0],a[1]-1,a[2],0,0,0)-330*60000};
- const mark=()=>{const lo=ts(P.start),hi=ts(P.end);
-  c.createOverlay({name:'verticalStraightLine',points:[{timestamp:lo}],extendData:'Base start'});
-  c.createOverlay({name:'verticalStraightLine',points:[{timestamp:hi}],extendData:'Base end'});
-  c.createOverlay({name:'priceLine',points:[{timestamp:hi,value:P.pivot}],extendData:'Selected pivot'});
-  P.bases.forEach((b,i)=>c.createOverlay({name:'horizontalSegment',points:[{timestamp:ts(b._end),value:Number(b._pivot)},{timestamp:ts(b._breakout),value:Number(b._pivot)}],extendData:'B'+(i+1)}));
- };setTimeout(mark,180);
+const SPAN={'3M':63,'6M':126,'1Y':252,'2Y':504,'5Y':1260};
+const $=id=>document.getElementById(id);
+const on={ema:true,sma:true,vol:true,rs:true};
+let chart=null,rng=SPAN[P.range]?P.range:'1Y',dark=false;
+
+function rgb(s){const m=(s||'').match(/[\d.]+/g);return m&&m.length>=3?m.slice(0,3).map(Number):null}
+function readTheme(){
+  let bg,fg;
+  try{let w=window.parent,d=w.document;if(!d.querySelector('.stApp')){w=w.parent;d=w.document;}
+    const cs=w.getComputedStyle(d.querySelector('.stApp'));bg=cs.backgroundColor;fg=cs.color;}catch(e){}
+  let b=rgb(bg),f=rgb(fg);
+  if(!b||!f||bg==='rgba(0, 0, 0, 0)'){const d=matchMedia('(prefers-color-scheme: dark)').matches;
+    b=d?[14,17,23]:[255,255,255];f=d?[250,250,250]:[36,48,66];}
+  dark=(0.299*b[0]+0.587*b[1]+0.114*b[2])<128;
+  const r=document.documentElement.style,a=x=>'rgba('+f.join(',')+','+x+')';
+  r.setProperty('--fg','rgb('+f.join(',')+')');r.setProperty('--bg','rgb('+b.join(',')+')');
+  r.setProperty('--line',a(.16));r.setProperty('--soft',a(.08));
+  return {text:a(.78),grid:a(dark?.09:.07),line:a(.22),bg:'rgb('+b.join(',')+')'};
 }
+const NARROW=()=>innerWidth<560;
+function chartStyles(t){
+  const rule=NARROW()?'follow_cross':'always';
+  const axis={axisLine:{color:t.line},tickLine:{color:t.line},tickText:{color:t.text,size:11}};
+  return {grid:{horizontal:{color:t.grid},vertical:{color:t.grid}},
+    candle:{tooltip:{showRule:rule,legend:{color:t.text,size:11,template:legends},title:{show:false,template:''}}},
+    indicator:{tooltip:{showRule:rule,text:{color:t.text,size:11}}},
+    xAxis:axis,yAxis:axis,separator:{color:t.line},
+    crosshair:{horizontal:{line:{color:t.line},text:{backgroundColor:dark?'#475569':'#334155',color:'#fff'}},
+               vertical:{line:{color:t.line},text:{backgroundColor:dark?'#475569':'#334155',color:'#fff'}}}};
+}
+const paneOf=n=>{const i=chart.getIndicators({name:n})[0];return i&&i.paneId;};
+const sizePane=(n,h)=>{const id=paneOf(n);if(id)try{chart.setPaneOptions({id,height:h});}catch(e){}};
+const IND={
+  ema:()=>chart.createIndicator({name:'EMA',calcParams:[10,21],paneId:'candle_pane'},true),
+  sma:()=>chart.createIndicator({name:'MA',calcParams:[50,200],paneId:'candle_pane'},true),
+  vol:()=>{chart.createIndicator({name:'VOL',calcParams:[20]},false);sizePane('VOL',72);},
+  rs:()=>{chart.createIndicator('MP_RS_LINE',false);sizePane('MP_RS_LINE',72);}
+};
+const DEL={ema:'EMA',sma:'MA',vol:'VOL',rs:'MP_RS_LINE'};
+const fmt=v=>v==null?'–':Number(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtV=v=>v==null?'–':v>=1e7?(v/1e7).toFixed(2)+'Cr':v>=1e5?(v/1e5).toFixed(2)+'L':Math.round(v).toLocaleString('en-IN');
+const legends=(data)=>{const k=data.current;if(!k)return [];
+  return [{title:'O ',value:fmt(k.open)},{title:'H ',value:fmt(k.high)},{title:'L ',value:fmt(k.low)},
+          {title:'C ',value:fmt(k.close)},{title:'Vol ',value:fmtV(k.volume)}];};
+function setRange(r){
+  rng=r;document.querySelectorAll('#rng button').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
+  if(!chart)return;
+  const gap=NARROW()?16:48,n=Math.max(20,Math.min(SPAN[r],P.bars.length)),w=Math.max(200,$('chart').clientWidth-64-gap);
+  try{chart.setOffsetRightDistance(gap);}catch(e){}
+  chart.setBarSpace(Math.max(1,Math.min(50,w/n)));chart.scrollToRealTime();
+}
+function mark(){
+  const ts=s=>{const a=s.split('-').map(Number);return Date.UTC(a[0],a[1]-1,a[2])-330*60000};
+  const dash=c=>({line:{style:'dashed',color:c,size:1}});
+  chart.createOverlay({name:'verticalStraightLine',points:[{timestamp:ts(P.start)}],styles:dash('#6366f1')});
+  chart.createOverlay({name:'verticalStraightLine',points:[{timestamp:ts(P.end)}],styles:dash('#6366f1')});
+  chart.createOverlay({name:'priceLine',points:[{timestamp:ts(P.end),value:P.pivot}],styles:dash('#f59e0b')});
+  (P.bases||[]).forEach(b=>chart.createOverlay({name:'horizontalSegment',
+    points:[{timestamp:ts(b._end),value:Number(b._pivot)},{timestamp:ts(b._breakout),value:Number(b._pivot)}],
+    styles:{line:{style:'solid',color:'#94a3b8',size:2}}}));
+}
+function start(){
+  const t=readTheme();
+  if(!window.klinecharts){$('chart').innerHTML='<div class="err">Chart library did not load. Check the network and reload.</div>';return;}
+  try{const f=window.frameElement;if(f){const vh=window.parent.innerHeight||0;
+    if(vh){const h=Math.max(380,Math.min(Math.round(vh*.66),P.height+80));f.style.height=h+'px';f.setAttribute('height',h);}}}catch(e){}
+  const rsBy=new Map(P.bars.map(b=>[b.timestamp,b.rs]));
+  try{klinecharts.registerIndicator({name:'MP_RS_LINE',shortName:'RS vs index',series:'normal',precision:2,
+    figures:[{key:'rs',title:'RS: ',type:'line'}],calc:d=>d.map(k=>({rs:rsBy.get(k.timestamp)??null}))});}catch(e){}
+  chart=klinecharts.init('chart');chart.setTimezone('Asia/Kolkata');
+  chart.setStyles(chartStyles(t));
+  chart.setSymbol({ticker:P.symbol+' · NSE',pricePrecision:2,volumePrecision:0});chart.setPeriod({span:1,type:'day'});
+  chart.setLocale('en-US');chart.setDataLoader({getBars:({callback})=>callback(P.bars)});
+  ['ema','sma','vol','rs'].forEach(k=>IND[k]());
+  setTimeout(()=>{mark();setRange(rng);},220);
+  new ResizeObserver(()=>{chart.resize();setRange(rng);}).observe($('chart'));
+}
+$('rng').innerHTML=Object.keys(SPAN).map(r=>'<button type="button" data-r="'+r+'">'+r+'</button>').join('');
+$('rng').onclick=e=>{const r=e.target.dataset&&e.target.dataset.r;if(r)setRange(r);};
+['ema','sma','vol','rs'].forEach(k=>$('t_'+k).onclick=()=>{
+  on[k]=!on[k];$('t_'+k).classList.toggle('on',on[k]);
+  try{if(on[k])IND[k]();else chart.removeIndicator({name:DEL[k]});}catch(e){}
+  setTimeout(()=>setRange(rng),30);
+});
+document.querySelectorAll('#rng button').forEach(b=>b.classList.toggle('on',b.dataset.r===rng));
 start();
-</script></body></html>""".replace("__PAYLOAD__", payload).replace("__SYMBOL__", symbol)
-    _embed(html, 670)
+</script></body></html>
+"""
+
+
+def chart_explorer(bars, symbol: str, base_start: str, base_end: str, pivot: float,
+                   base_history=None, visible_window="1Y", height: int = 560) -> None:
+    """Render a transient chart: theme-aware, with in-chart range buttons and indicator toggles.
+
+    All bars are sent once; the range buttons (3M-5Y) only zoom, so moving between ranges is
+    instant and the moving averages are always calculated from the full history.
+    """
+    window = str(visible_window).upper()
+    window = window if window in ("3M", "6M", "1Y", "2Y", "5Y") else "1Y"
+    bases = [row for row in (base_history or []) if row.get("_breakout")]
+    payload = json.dumps({"symbol": symbol, "bars": bars, "start": base_start, "end": base_end,
+                          "pivot": float(pivot), "bases": bases, "range": window,
+                          "height": int(height)}).replace("</", "<\\/")
+    html = _CHART_HTML.replace("__KLINE_SRC__", _KLINE_SRC).replace("__PAYLOAD__", payload)
+    _embed(html, int(height))
