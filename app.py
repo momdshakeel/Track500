@@ -758,14 +758,40 @@ def chart_base_history(history: pd.DataFrame) -> pd.DataFrame:
         fail = next((j for j in range(b + 1, n)
                      if closes[j] < pivot * .92 or (np.isfinite(sma50[j]) and closes[j] < sma50[j])), None)
         stop = fail if fail is not None else n - 1
-        best = float(highs[b:stop + 1].max() / pivot - 1) * 100
+        best_i = b + int(np.argmax(highs[b:stop + 1]))
+        best_px = float(highs[best_i])
+        best = (best_px / pivot - 1) * 100
         now = float(closes[-1] / pivot - 1) * 100
+        line = pivot * .92
         if fail is not None:
+            close_f = float(closes[fail])
+            tests = []
+            if close_f < line:
+                tests.append(f"below the 8%-under-pivot level ({_fmt_price(line)})")
+            if np.isfinite(sma50[fail]) and close_f < sma50[fail]:
+                tests.append(f"below its 50-day average ({_fmt_price(float(sma50[fail]))})")
             then, status = f"Failed {dates[fail]:%d %b %y} · best {best:+.1f}% first", "Failed"
+            reason = [
+                f"On {dates[fail]:%d %b %y} the stock closed at {_fmt_price(close_f)}, " + " and ".join(tests) + ". "
+                "That is the first close after the breakout that broke either rule, so the base is marked Failed.",
+                f"Best = the highest price after the breakout and before it failed: {_fmt_price(best_px)} on "
+                f"{dates[best_i]:%d %b %y}, which is {best:+.1f}% above the pivot ({_fmt_price(pivot)}).",
+                f"To check by hand: open {dates[fail]:%d %b %y} on the chart and compare that day's close with the "
+                "blue 50-day line and with the level 8% under the pivot."]
         else:
+            close_l, sma_l = float(closes[-1]), float(sma50[-1])
+            levels = f"the 8%-under-pivot level ({_fmt_price(line)})"
+            if np.isfinite(sma_l):
+                levels += f" and its 50-day average ({_fmt_price(sma_l)})"
             then, status = f"Holding · best {best:+.1f}% · now {now:+.1f}%", "Holding"
+            reason = [
+                f"The latest close ({_fmt_price(close_l)} on {dates[-1]:%d %b %y}) is still above {levels}, so the "
+                "breakout has not failed.",
+                f"Best so far: {_fmt_price(best_px)} on {dates[best_i]:%d %b %y} ({best:+.1f}% vs the pivot "
+                f"{_fmt_price(pivot)}). Now: {now:+.1f}% vs the pivot.",
+                "It turns Failed on the first close below either level."]
         bases.append({**item, "forming": False, "vol_x": vol_x, "then": then, "status": status,
-                      "best": best, "now": now, "breakout": f"{dates[b]:%d %b %y}",
+                      "best": best, "now": now, "breakout": f"{dates[b]:%d %b %y}", "reason": reason,
                       "volume": f"{vol_x:.1f}×" if np.isfinite(vol_x) else "—"})
 
     # Current base: the highest high since the last breakout, if price has pulled back from it.
@@ -782,7 +808,11 @@ def chart_base_history(history: pd.DataFrame) -> pd.DataFrame:
             bases.append({"start_i": peak, "end_i": n - 1, "breakout_i": None, "span": span,
                           "depth": depth, "pivot": pivot, "low": low, "forming": True,
                           "then": f"Forming · {under:.1f}% under pivot", "status": "Forming",
-                          "best": 0.0, "now": -under, "breakout": "–", "volume": "–"})
+                          "best": 0.0, "now": -under, "breakout": "–", "volume": "–",
+                          "reason": [f"No close above the pivot ({_fmt_price(pivot)}) yet. The latest close is "
+                                     f"{_fmt_price(float(closes[-1]))}, which is {under:.1f}% under it.",
+                                     f"It counts as a breakout on a close above {_fmt_price(pivot)}. The base low so far is "
+                                     f"{_fmt_price(low)} ({depth:.0f}% deep)."]})
 
     bases.sort(key=lambda item: item["start_i"])
     rows = []
@@ -798,6 +828,7 @@ def chart_base_history(history: pd.DataFrame) -> pd.DataFrame:
             "_breakout": "" if item["breakout_i"] is None else f"{dates[item['breakout_i']]:%Y-%m-%d}",
             "_pivot": float(item["pivot"]), "_low": float(item["low"]),
             "_status": item["status"], "_best": float(item["best"]), "_now": float(item["now"]),
+            "_reason": list(item.get("reason", [])),
         })
     return pd.DataFrame(rows[::-1])
 
@@ -860,7 +891,7 @@ _DIALOG_CSS = """<style>
 
 
 _BASE_TABLE_CSS = """<style>
-.mp-bt{border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:10px;padding:8px 12px 6px}
+.mp-bt{border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:10px;padding:8px 12px 8px;margin-bottom:16px}
 .mp-bt h4{margin:0 0 4px;font-size:.9rem;font-weight:700;line-height:1.3;padding:0}
 .mp-bt h4 small{font-weight:400;opacity:.62;margin-left:6px;font-size:.74rem}
 .mp-bt table{width:100%;border-collapse:collapse;font-size:.8rem;line-height:1.2;border:0;margin:0}
@@ -879,6 +910,10 @@ background:#1f2937;color:#f3f4f6;font:400 .72rem/1.4 system-ui,-apple-system,"Se
 z-index:60;box-shadow:0 6px 18px rgba(0,0,0,.3);cursor:default}
 .mp-bt .i:hover .tip,.mp-bt .i:focus .tip{display:block}
 .mp-bt th:first-child .tip{left:-6px;transform:none}
+.mp-bt td{position:relative}
+.mp-bt .tip.wide{width:min(330px,86vw);left:auto;right:-6px;transform:none;top:auto;bottom:calc(100% + 7px)}
+.mp-bt .tip .ln{display:block;margin-top:5px}.mp-bt .tip b{display:block;font-size:.76rem;color:#fff}
+.mp-bt th:last-child .tip{left:auto;right:-6px;transform:none}
 .mp-bt .fail{color:#ef4444;font-weight:600}.mp-bt .form{color:#3b82f6;font-weight:600}.mp-bt .hold{color:#22c55e;font-weight:600}
 .mp-bt .note{margin:6px 0 0;font-size:.7rem;opacity:.62;line-height:1.35}
 .mp-bt .mob{display:none}
@@ -891,6 +926,8 @@ z-index:60;box-shadow:0 6px 18px rgba(0,0,0,.3);cursor:default}
  .mp-bt td:first-child::before{content:none}.mp-bt td:first-child{font-size:.95rem;align-self:end}
  .mp-bt td:last-child{grid-column:1/-1}
  .mp-bt .mob{display:block}
+ .mp-bt td:last-child .i{position:static}
+ .mp-bt td:last-child .tip.wide{left:0;right:0;width:auto;top:auto;bottom:auto;margin-top:6px}
 }
 </style>"""
 
@@ -905,6 +942,9 @@ def _base_table_html(records) -> str:
         word, _, rest = then.partition(" ")
         cls = {"Failed": "fail", "Forming": "form", "Holding": "hold"}.get(word, "")
         then_html = f'<span class="{cls}">{word}</span> {rest}' if cls else then
+        lines = "".join(f'<span class="ln">{_esc(str(x))}</span>' for x in (r.get("_reason") or []))
+        if lines:
+            then_html += (f' <span class="i" tabindex="0">i<span class="tip wide"><b>Why {_esc(word)}?</b>{lines}</span></span>')
         rows.append(
             f'<tr><td data-l="Base">{_esc(str(r["Base"]))}</td><td data-l="Started">{_esc(str(r["Started"]))}</td>'
             f'<td data-l="Length">{_esc(str(r["Length"]))}</td><td data-l="Depth">{_esc(str(r["Depth"]))}</td>'
@@ -923,12 +963,14 @@ def _base_table_html(records) -> str:
             '<th>Breakout</th>'
             '<th>Volume' + tip("Breakout-day volume divided by the 50-day average volume (2.0× means twice the usual volume). "
                                "Strong breakouts are usually 1.5× or more; below 1× lacked volume support.") + '</th>'
-            '<th>Then</th></tr></thead>')
+            '<th>Then' + tip("What happened after the breakout. Click the i on a row for the exact reason and the numbers to check on the chart.") + '</th></tr></thead>')
     return (_BASE_TABLE_CSS + '<div class="mp-bt"><h4>Base history<small>last 12 months · newest first</small></h4>'
             f'<table>{head}<tbody>{"".join(rows)}</tbody></table>'
             '<p class="note mob">Pivot = the base high (the breakout level). Volume = breakout-day volume vs its 50-day average.</p>'
-            '<p class="note">Bases follow the chart\'s Bases indicator. Failed = closed 8% under the pivot or below '
-            'the 50-day average after the breakout. History, not a forecast.</p></div>')
+            '<p class="note"><b>Forming</b> = no close above the pivot yet. <b>Holding</b> = since the breakout, price has not closed '
+            '8% under the pivot or below its 50-day average. <b>Failed</b> = it did, on the date shown (the first such close). '
+            '<b>Best</b> = the highest price after the breakout (before any failure) vs the pivot. Click the i beside a result '
+            'for the exact numbers. Bases follow the chart\'s Bases indicator. History, not a forecast.</p></div>')
 
 
 
