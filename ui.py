@@ -505,7 +505,9 @@ color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
 .rsp{display:inline-flex;align-items:baseline;flex-wrap:wrap;font-size:11.5px;opacity:.95;margin-left:6px}
 .rsp b{font-weight:700}
 .rsp .k{opacity:.6;margin-left:7px;margin-right:2px}
+#tb{display:flex;flex-direction:column;gap:4px}
 #bar,#chips{display:flex;align-items:center;gap:8px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+@media(min-width:1000px){#tb{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 8px}#bar,#chips{display:contents}}
 #bar::-webkit-scrollbar,#chips::-webkit-scrollbar{display:none}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
 .seg button{border:0;background:transparent;color:inherit;font:inherit;font-weight:600;padding:5px 10px;cursor:pointer;min-width:34px}
@@ -515,7 +517,7 @@ color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
 select{flex:none;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:600;padding:5px 8px}
 select option{color:#111;background:#fff}
 .chip{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
-background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 10px;cursor:pointer;opacity:.55}
+background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 9px;cursor:pointer;opacity:.55}
 .chip i{width:14px;height:3px;border-radius:2px;background:var(--c)}
 .chip i.b{height:9px;width:9px;border-radius:2px}
 .chip.on{opacity:1;background:var(--soft)}
@@ -526,12 +528,14 @@ background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 1
 #lg .hl{color:#2563eb;font-weight:600}
 #ft{font-size:10.5px;opacity:.6;text-align:right}
 .err{padding:16px;opacity:.75}
-@media(max-width:560px){.sym{font-size:20px}.px{font-size:21px}.co{font-size:13px}.sub,.asof,.long,#lg .hl{display:none}.seg button{padding:5px 8px;min-width:30px}#lg{font-size:10px;max-width:calc(100% - 70px)}#lg .m{margin-left:4px}.r{gap:6px}#hd{gap:4px}}
+@media(max-width:1149px){.sn{display:none}}
+@media(max-width:560px){.sym{font-size:20px}.px{font-size:21px}.co{font-size:13px}.sub,.asof,.long,.sn,#lg .hl{display:none}.seg button{padding:5px 8px;min-width:30px}#lg{font-size:10px;max-width:calc(100% - 70px)}#lg .m{margin-left:4px}.r{gap:6px}#hd{gap:4px}}
 </style></head><body>
 <div id="hd"></div>
+<div id="tb">
 <div id="bar">
  <div class="seg" id="tf"><button type="button" data-t="D">D</button><button type="button" data-t="W">W</button><button type="button" data-t="M">M</button></div>
- <select id="ctype" title="Chart type"><option value="candle_solid">Candles</option><option value="candle_up_stroke">Hollow</option><option value="ohlc">OHLC bars</option><option value="area">Line</option></select>
+ <select id="ctype" title="Chart type"><option value="candle_solid">Candles</option><option value="candle_up_stroke">Hollow</option><option value="ohlc">OHLC bars</option><option value="hlc">HLC bars</option><option value="area">Line</option></select>
  <div class="seg"><button type="button" id="zin" title="Zoom in">+</button><button type="button" id="zout" title="Zoom out">−</button></div>
  <div class="seg" id="rng"></div>
 </div>
@@ -541,6 +545,7 @@ background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 1
  <button class="chip on" id="t_vol" style="--c:#10b981" title="Volume with its 50-day average"><i class="b"></i>Volume</button>
  <button class="chip on" id="t_rs" style="--c:#16a34a" title="Price relative to the benchmark index"><i></i>RS line</button>
  <button class="chip on" id="t_base" style="--c:#3b82f6" title="Detected bases, numbered oldest first"><i class="b"></i>Bases</button>
+</div>
 </div>
 <div id="wrap"><div id="lg"></div><div id="chart"></div></div>
 <div id="ft"></div>
@@ -562,17 +567,14 @@ function header(){
   if(!I){$('hd').style.display='none';return;}
   const up=I.change>=0,st=String(I.stage||''),sn=parseInt((st.match(/\d/)||[0])[0]);
   const sc={1:'#64748b',2:'#15803d',3:'#d97706',4:'#dc2626'}[sn]||'#64748b';
-  let r1='<div class="r"><span class="sym">'+esc(I.symbol)+'</span><span class="co">'+esc(I.company)+'</span>';
-  if(I.sectorBadge)r1+='<span class="pill" style="--c:#2563eb">'+esc(I.sectorBadge)+'</span>';
-  if(I.sector)r1+='<span class="sub">'+esc(I.sector)+'</span>';
-  r1+='</div>';
   let r2='<div class="r"><span class="px">'+fmt(I.price).replace(/\.00$/,'')+'</span><span class="chg '+(up?'up':'dn')+'">'+sgn(I.change,2)+'%<span class="asof">'+(I.asOf?' on '+esc(I.asOf):'')+'</span></span>';
   if(I.rs!=null)r2+='<span class="lab">RS</span><span class="pill solid" style="--c:#15803d">'+I.rs+'</span>'+(I.rsChange?'<span class="rsd '+(I.rsChange>0?'up':'dn')+'">'+(I.rsChange>0?'+':'')+I.rsChange+'</span>':'');
   if(st)r2+='<span class="pill solid" style="--c:'+sc+'">'+esc(st)+'</span>';
+  if(I.sectorBadge)r2+='<span class="pill" style="--c:#2563eb" title="'+esc(I.sector||'')+'">'+esc(I.sectorBadge)+(I.sector?'<span class="sn"> · '+esc(I.sector)+'</span>':'')+'</span>';
   if(I.rsPeriods&&I.rsPeriods.length)r2+='<span class="rsp"><span class="lab">RS line<span class="long"> vs '+esc(I.benchmark||'index')+'</span></span>'+
     I.rsPeriods.map(p=>'<span class="k">'+p[0]+'</span><b class="'+(p[1]==null?'':p[1]>=0?'up':'dn')+'">'+(p[1]==null?'–':sgn(p[1],1)+'%')+'</b>').join('')+'</span>';
   r2+='</div>';
-  $('hd').innerHTML=r1+r2;
+  $('hd').innerHTML=r2;
 }
 
 /* ---------- theme ---------- */
@@ -709,6 +711,17 @@ function start(){
               styles:()=>({style:'fill',color:'#2563eb',borderColor:'#2563eb'})}],
     createTooltipDataSource:()=>({name:'RS line vs '+bench+' (% since start of chart)',calcParamsText:'',features:[],legends:[]}),
     calc:rsCalc});}catch(e){}
+  try{klinecharts.registerIndicator({name:'MP_HLC',shortName:'HLC',series:'price',precision:2,figures:[],calc:l=>l.map(()=>({})),
+    draw:({ctx,chart:c,xAxis,yAxis})=>{
+      const list=c.getDataList(),vr=c.getVisibleRange(),bs=c.getBarSpace().bar,tick=Math.max(2,Math.min(8,bs*.45));
+      ctx.lineWidth=Math.max(1,Math.min(2,bs/4));ctx.lineCap='butt';
+      for(let i=Math.max(0,vr.from);i<Math.min(list.length,vr.to);i++){
+        const k=list[i],p=list[i-1],x=xAxis.convertToPixel(i);
+        ctx.strokeStyle=(!p||k.close>=p.close)?pal.up:pal.dn;
+        const yh=yAxis.convertToPixel(k.high),yl=yAxis.convertToPixel(k.low),yc=yAxis.convertToPixel(k.close);
+        ctx.beginPath();ctx.moveTo(x,yh);ctx.lineTo(x,yl);ctx.moveTo(x,yc);ctx.lineTo(x+tick,yc);ctx.stroke();
+      }
+      return true;}});}catch(e){}
   try{klinecharts.registerOverlay({name:'mpBase',totalStep:3,lock:true,needDefaultPointFigure:false,needDefaultXAxisFigure:false,needDefaultYAxisFigure:false,
     createPointFigures:({coordinates,bounding,overlay})=>{
       if(!coordinates||coordinates.length<2)return [];
@@ -734,7 +747,18 @@ function start(){
 $('rng').innerHTML=RLIST.map(r=>'<button type="button" data-r="'+r+'">'+r+'</button>').join('');
 $('rng').onclick=e=>{const r=e.target.dataset&&e.target.dataset.r;if(r)setRange(r);};
 $('tf').onclick=e=>{const t=e.target.dataset&&e.target.dataset.t;if(t&&t!==tf)setTF(t);};
-$('ctype').onchange=e=>chart.setStyles({candle:{type:e.target.value}});
+function barStyle(hide){
+  const c=hide?'rgba(0,0,0,0)':null,g='#94a3b8';
+  return {upColor:c||pal.up,downColor:c||pal.dn,noChangeColor:c||g,upBorderColor:c||pal.up,downBorderColor:c||pal.dn,noChangeBorderColor:c||g,
+          upWickColor:c||pal.up,downWickColor:c||pal.dn,noChangeWickColor:c||g};
+}
+function setType(v){
+  const hlc=v==='hlc';
+  chart.setStyles({candle:{type:hlc?'ohlc':v,bar:barStyle(hlc)}});
+  try{chart.removeIndicator({name:'MP_HLC'});}catch(e){}
+  if(hlc)chart.createIndicator({name:'MP_HLC',paneId:'candle_pane',createTooltipDataSource:BLANK},true);
+}
+$('ctype').onchange=e=>setType(e.target.value);
 $('zin').onclick=()=>{const b=chart.getBarSpace().bar;chart.setBarSpace(Math.min(50,b*1.3));document.querySelectorAll('#rng button').forEach(x=>x.classList.remove('on'));};
 $('zout').onclick=()=>{const b=chart.getBarSpace().bar;chart.setBarSpace(Math.max(1,b/1.3));document.querySelectorAll('#rng button').forEach(x=>x.classList.remove('on'));};
 ['ema','sma','vol','rs','base'].forEach(k=>$('t_'+k).onclick=()=>{

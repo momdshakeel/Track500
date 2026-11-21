@@ -14,6 +14,7 @@ Files in the repository: app.py, ui.py, nse500_rs_rating.py, build_data.py, requ
 .github/workflows/daily_scan.yml   (optional: .streamlit/config.toml)
 """
 import os
+import re
 import sys
 from html import escape as _esc
 from io import BytesIO
@@ -827,19 +828,31 @@ def _clear_chart_request() -> None:
     st.session_state.pop("symbol_chart_dialog_data", None)
 
 
-def _chart_dialog(func):
-    """Open as a large dialog; closing it (x, Esc or outside click) clears the request."""
-    try:
-        return st.dialog("Stock chart", width="large", on_dismiss=_clear_chart_request)(func), True
-    except TypeError:  # older Streamlit without on_dismiss: the dialog shows its own Close button
-        return st.dialog("Stock chart", width="large")(func), False
+_DIALOG_HAS_DISMISS = True
+
+
+def _md_escape(text: str) -> str:
+    return re.sub(r"([\\`*_\[\]<>#|~$])", r"\\\1", str(text))
+
+
+def _dialog_title(symbol: str) -> str:
+    """Title row text: SYMBOL  Company name."""
+    symbol = str(symbol).strip().upper()
+    parts = [f"**{_md_escape(symbol)}**"]
+    match = result[result["Symbol"].astype(str) == symbol]
+    if not match.empty:
+        company = str(match.iloc[0].get("Company Name", "") or "")
+        if company and company.lower() != "nan":
+            parts.append(_md_escape(company))
+    return "  ".join(parts)
 
 
 _DIALOG_CSS = """<style>
-[data-testid="stDialog"] section[role="dialog"] h2{padding:10px 56px 0 20px;min-height:0;opacity:.75}
-[data-testid="stDialog"] section[role="dialog"] h2,[data-testid="stDialog"] section[role="dialog"] h2 p{font-size:.8rem;font-weight:600;line-height:1.3}
+[data-testid="stDialog"] section[role="dialog"] h2{padding:8px 56px 0 20px;min-height:0}
+[data-testid="stDialog"] section[role="dialog"] h2 p{font-size:.88rem;font-weight:500;line-height:1.35;opacity:.85}
+[data-testid="stDialog"] section[role="dialog"] h2 p strong{font-family:Georgia,"Times New Roman",serif;font-size:1.3rem;font-weight:800;letter-spacing:.01em;margin-right:6px}
 [data-testid="stDialog"] section[role="dialog"] h2 span{margin-right:0}
-[data-testid="stDialog"] section[role="dialog"] > button{z-index:20}
+[data-testid="stDialog"] section[role="dialog"] > button{z-index:20;top:10px}
 [data-testid="stDialog"] section[role="dialog"] > div:last-child{padding:4px 20px 16px}
 [data-testid="stDialog"] [data-testid="stVerticalBlock"]{gap:.4rem}
 [data-testid="stDialog"] [data-testid="stElementContainer"]:has(.mp-dcss){display:none}
@@ -847,26 +860,37 @@ _DIALOG_CSS = """<style>
 
 
 _BASE_TABLE_CSS = """<style>
-.mp-bt{border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:12px;padding:12px 14px 10px}
-.mp-bt h4{margin:0 0 6px;font-size:.98rem;font-weight:700}
-.mp-bt h4 small{font-weight:400;opacity:.62;margin-left:6px;font-size:.8rem}
-.mp-bt table{width:100%;border-collapse:collapse;font-size:.84rem;border:0}
+.mp-bt{border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:10px;padding:8px 12px 6px}
+.mp-bt h4{margin:0 0 4px;font-size:.9rem;font-weight:700;line-height:1.3;padding:0}
+.mp-bt h4 small{font-weight:400;opacity:.62;margin-left:6px;font-size:.74rem}
+.mp-bt table{width:100%;border-collapse:collapse;font-size:.8rem;line-height:1.2;border:0;margin:0}
 .mp-bt th,.mp-bt td{border-left:0;border-right:0;background:transparent}
-.mp-bt th{border-top:0;border-bottom:1px solid color-mix(in srgb,currentColor 16%,transparent)}
-.mp-bt th{font-weight:600;opacity:.7;text-align:right;padding:6px 8px;font-size:.78rem;white-space:nowrap}
-.mp-bt td{padding:8px;text-align:right;border-top:1px solid color-mix(in srgb,currentColor 12%,transparent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-bt th{border-top:0;border-bottom:1px solid color-mix(in srgb,currentColor 16%,transparent);font-weight:600;text-align:right;
+padding:3px 8px;font-size:.72rem;white-space:nowrap;color:color-mix(in srgb,currentColor 68%,transparent)}
+.mp-bt td{padding:4px 8px;text-align:right;border-top:1px solid color-mix(in srgb,currentColor 11%,transparent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-bt tbody tr:first-child td{border-top:0}
 .mp-bt th:first-child,.mp-bt td:first-child{text-align:left;font-weight:700}
 .mp-bt th:last-child,.mp-bt td:last-child{text-align:left;white-space:normal}
-.mp-bt .i{opacity:.5;font-size:.7rem;margin-left:3px;cursor:help}
+.mp-bt .i{position:relative;display:inline-block;width:13px;height:13px;margin-left:4px;border:1px solid color-mix(in srgb,currentColor 50%,transparent);
+border-radius:50%;font:italic 700 9px/11px Georgia,serif;text-align:center;vertical-align:1px;cursor:pointer;outline:0;opacity:.75}
+.mp-bt .i:hover,.mp-bt .i:focus{opacity:1;background:color-mix(in srgb,currentColor 12%,transparent)}
+.mp-bt .tip{display:none;position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);width:232px;padding:7px 9px;border-radius:8px;
+background:#1f2937;color:#f3f4f6;font:400 .72rem/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;font-style:normal;text-align:left;white-space:normal;
+z-index:60;box-shadow:0 6px 18px rgba(0,0,0,.3);cursor:default}
+.mp-bt .i:hover .tip,.mp-bt .i:focus .tip{display:block}
+.mp-bt th:first-child .tip{left:-6px;transform:none}
 .mp-bt .fail{color:#ef4444;font-weight:600}.mp-bt .form{color:#3b82f6;font-weight:600}.mp-bt .hold{color:#22c55e;font-weight:600}
-.mp-bt .note{margin:8px 0 0;font-size:.74rem;opacity:.62;line-height:1.4}
+.mp-bt .note{margin:6px 0 0;font-size:.7rem;opacity:.62;line-height:1.35}
+.mp-bt .mob{display:none}
 @media(max-width:640px){
  .mp-bt thead{display:none}.mp-bt table,.mp-bt tbody{display:block}
- .mp-bt tr{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 8px;padding:10px 0;border-top:1px solid color-mix(in srgb,currentColor 12%,transparent)}
- .mp-bt td{display:block;border:0;padding:0;text-align:left;white-space:normal}
- .mp-bt td::before{content:attr(data-l);display:block;font-size:.66rem;font-weight:500;opacity:.55}
- .mp-bt td:first-child::before{content:none}.mp-bt td:first-child{font-size:1.05rem;align-self:end}
+ .mp-bt tr{display:grid;grid-template-columns:repeat(4,1fr);gap:1px 8px;padding:5px 0;border-top:1px solid color-mix(in srgb,currentColor 11%,transparent)}
+ .mp-bt tbody tr:first-child{border-top:0}
+ .mp-bt td{display:block;border:0 !important;padding:0;text-align:left;white-space:normal;font-size:.76rem;line-height:1.2}
+ .mp-bt td::before{content:attr(data-l);display:block;font-size:.58rem;font-weight:500;opacity:.55;line-height:1.05}
+ .mp-bt td:first-child::before{content:none}.mp-bt td:first-child{font-size:.95rem;align-self:end}
  .mp-bt td:last-child{grid-column:1/-1}
+ .mp-bt .mob{display:block}
 }
 </style>"""
 
@@ -888,15 +912,24 @@ def _base_table_html(records) -> str:
             f'<td data-l="Volume">{_esc(str(r["Volume"]))}</td><td data-l="Then">{then_html}</td></tr>')
     if not rows:
         return ""
-    head = ('<thead><tr><th>Base<span class="i" title="B-numbers match the circles on the chart; B1 is the oldest.">ⓘ</span></th>'
+    def tip(text: str, first: bool = False) -> str:
+        return f'<span class="i" tabindex="0">i<span class="tip">{text}</span></span>'
+
+    head = ('<thead><tr><th>Base' + tip("A pause in the uptrend before the next advance. B-numbers match the circles on the chart "
+                                        "(B1 is the oldest). Started is the date of the base's left-side high.") + '</th>'
             '<th>Started</th><th>Length</th><th>Depth</th>'
-            '<th>Pivot<span class="i" title="The base high. A close above it is the breakout.">ⓘ</span></th>'
-            '<th>Breakout</th><th>Volume<span class="i" title="Breakout-day volume vs the 50-day average.">ⓘ</span></th>'
+            '<th>Pivot' + tip("The base's highest price and the buy point. A close above it is the breakout. "
+                              "For a forming base it is the level price still has to clear.") + '</th>'
+            '<th>Breakout</th>'
+            '<th>Volume' + tip("Breakout-day volume divided by the 50-day average volume (2.0× means twice the usual volume). "
+                               "Strong breakouts are usually 1.5× or more; below 1× lacked volume support.") + '</th>'
             '<th>Then</th></tr></thead>')
     return (_BASE_TABLE_CSS + '<div class="mp-bt"><h4>Base history<small>last 12 months · newest first</small></h4>'
             f'<table>{head}<tbody>{"".join(rows)}</tbody></table>'
+            '<p class="note mob">Pivot = the base high (the breakout level). Volume = breakout-day volume vs its 50-day average.</p>'
             '<p class="note">Bases follow the chart\'s Bases indicator. Failed = closed 8% under the pivot or below '
             'the 50-day average after the breakout. History, not a forecast.</p></div>')
+
 
 
 def _num(row, key, default=None):
@@ -1010,7 +1043,17 @@ def _show_symbol_chart_dialog(symbol: str) -> None:
         st.rerun()
 
 
-show_symbol_chart_dialog, _DIALOG_HAS_DISMISS = _chart_dialog(_show_symbol_chart_dialog)
+def show_symbol_chart_dialog(symbol: str) -> None:
+    """Open the chart dialog titled with the symbol and company; closing it clears the request."""
+    global _DIALOG_HAS_DISMISS
+    title = _dialog_title(symbol)
+    try:
+        decorator = st.dialog(title, width="large", on_dismiss=_clear_chart_request)
+        _DIALOG_HAS_DISMISS = True
+    except TypeError:  # older Streamlit without on_dismiss: the dialog shows its own Close button
+        decorator = st.dialog(title, width="large")
+        _DIALOG_HAS_DISMISS = False
+    decorator(_show_symbol_chart_dialog)(symbol)
 
 
 SCREEN_LIBRARY = {
