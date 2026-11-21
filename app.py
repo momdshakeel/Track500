@@ -690,67 +690,115 @@ def show_breadth_and_sectors():
     show(members, "sector_stocks", f"Liquid stocks in <b>{pick}</b>, sorted by RS Rating.")
 
 
+def _fmt_price(value: float) -> str:
+    return f"{value:,.2f}".rstrip("0").rstrip(".")
+
+
 def chart_base_history(history: pd.DataFrame) -> pd.DataFrame:
-    """Find distinct, recently completed base breakouts for this chart session only."""
+    """Find completed base breakouts plus the current forming base (chart session only).
+
+    A base starts at its left-side peak and the pivot is that peak's high. It is complete when
+    price closes above the pivot within 20 sessions of the base window; it has failed when a
+    later close is 8% under the pivot or below the 50-day average. Rows are newest first and
+    numbered oldest first (B1 = oldest) so the numbers match the circles drawn on the chart.
+    """
     frame = history.dropna(subset=["High", "Low", "Close", "Volume"]).copy()
     n = len(frame)
     if n < 55:
         return pd.DataFrame()
     highs, lows = frame["High"].to_numpy(), frame["Low"].to_numpy()
     closes, volumes = frame["Close"].to_numpy(), frame["Volume"].to_numpy()
+    sma50 = pd.Series(closes).rolling(50, min_periods=50).mean().to_numpy()
     dates = frame.index
     earliest = max(0, n - 252)
     candidates = []
-    windows = (30, 45, 60, 90, 120, 150)
     for end in range(max(29, earliest), n - 1):
-        for length in windows:
+        for length in (15, 20, 30, 45, 60, 90, 120, 150):
             start = end - length + 1
             if start < 0:
                 continue
-            hi = float(highs[start:end + 1].max())
-            lo = float(lows[start:end + 1].min())
-            if hi <= 0 or (hi - lo) / hi > .35:
+            peak = start + int(np.argmax(highs[start:end + 1]))
+            span = end - peak + 1
+            if span < 15:                      # need at least ~3 weeks after the peak
                 continue
-            if abs(closes[end] / closes[start] - 1) > .15:
+            pivot = float(highs[peak])
+            low = float(lows[peak:end + 1].min())
+            depth = (pivot - low) / pivot if pivot > 0 else 1
+            if depth < .08 or depth > (.20 if span < 25 else .35):
                 continue
-            after = next((j for j in range(end + 1, min(n, end + 21)) if closes[j] > hi), None)
+            if np.isfinite(sma50[peak]) and closes[peak] < sma50[peak]:
+                continue                       # a base must start from strength, not a downtrend
+            if abs(closes[end] / closes[peak] - 1) > .15:
+                continue
+            after = next((j for j in range(end + 1, min(n, end + 21)) if closes[j] > pivot), None)
             if after is None or n - 1 - after > 252:
                 continue
-            avg_vol = float(np.nanmean(volumes[max(0, after - 50):after]))
-            vol_x = float(volumes[after] / avg_vol) if avg_vol > 0 else np.nan
-            best = float(highs[after:].max() / closes[after] - 1) * 100
-            now = float(closes[-1] / closes[after] - 1) * 100
-            status = "Failed" if closes[-1] < hi * .92 else "Holding"
-            candidates.append({
-                "end_i": end, "start_i": start, "breakout_i": after, "length": length,
-                "depth": (hi - lo) / hi * 100, "pivot": hi, "vol_x": vol_x,
-                "best": best, "now": now, "status": status,
-            })
-    # Multiple overlapping windows often describe the same base. Keep the longest
-    # qualifying window for each breakout cluster, then show the latest five.
-    candidates.sort(key=lambda item: (item["breakout_i"], item["length"]), reverse=True)
+            if np.isfinite(sma50[after]) and closes[after] < sma50[after]:
+                continue
+            candidates.append({"start_i": peak, "end_i": end, "breakout_i": after, "span": span,
+                               "depth": depth * 100, "pivot": pivot, "low": low})
+    # Several windows describe the same base: keep the longest one per breakout cluster.
+    candidates.sort(key=lambda item: (item["breakout_i"], item["span"]), reverse=True)
     distinct = []
     for item in candidates:
-        if any(abs(item["breakout_i"] - old["breakout_i"]) < 15 for old in distinct):
+        if any(abs(item["breakout_i"] - old["breakout_i"]) < 15
+               or (item["start_i"] < old["breakout_i"] and item["breakout_i"] > old["start_i"])
+               for old in distinct):
             continue
         distinct.append(item)
         if len(distinct) == 5:
             break
+
+    bases = []
+    for item in distinct:
+        b, pivot = item["breakout_i"], item["pivot"]
+        avg_vol = float(np.nanmean(volumes[max(0, b - 50):b])) if b > 0 else 0.0
+        vol_x = float(volumes[b] / avg_vol) if avg_vol > 0 else float("nan")
+        fail = next((j for j in range(b + 1, n)
+                     if closes[j] < pivot * .92 or (np.isfinite(sma50[j]) and closes[j] < sma50[j])), None)
+        stop = fail if fail is not None else n - 1
+        best = float(highs[b:stop + 1].max() / pivot - 1) * 100
+        now = float(closes[-1] / pivot - 1) * 100
+        if fail is not None:
+            then, status = f"Failed {dates[fail]:%d %b %y} · best {best:+.1f}% first", "Failed"
+        else:
+            then, status = f"Holding · best {best:+.1f}% · now {now:+.1f}%", "Holding"
+        bases.append({**item, "forming": False, "vol_x": vol_x, "then": then, "status": status,
+                      "best": best, "now": now, "breakout": f"{dates[b]:%d %b %y}",
+                      "volume": f"{vol_x:.1f}×" if np.isfinite(vol_x) else "—"})
+
+    # Current base: the highest high since the last breakout, if price has pulled back from it.
+    first = max([x["breakout_i"] for x in bases] + [n - 150]) + 1 if bases else max(0, n - 150)
+    first = max(0, min(first, n - 16))
+    peak = first + int(np.argmax(highs[first:]))
+    span = n - peak
+    if span >= 15:
+        pivot = float(highs[peak])
+        low = float(lows[peak:].min())
+        depth = (pivot - low) / pivot * 100 if pivot > 0 else 0
+        under = (pivot - closes[-1]) / pivot * 100
+        if 8 <= depth <= 35 and under > 0:
+            bases.append({"start_i": peak, "end_i": n - 1, "breakout_i": None, "span": span,
+                          "depth": depth, "pivot": pivot, "low": low, "forming": True,
+                          "then": f"Forming · {under:.1f}% under pivot", "status": "Forming",
+                          "best": 0.0, "now": -under, "breakout": "–", "volume": "–"})
+
+    bases.sort(key=lambda item: item["start_i"])
     rows = []
-    for idx, item in enumerate(distinct, 1):
+    for number, item in enumerate(bases, 1):
+        stop_i = item["breakout_i"] if item["breakout_i"] is not None else n - 1
         rows.append({
-            "Base": f"B{idx}", "Started": dates[item["start_i"]].strftime("%d %b %y"),
-            "Length": f"{item['length']} sessions", "Depth": f"{item['depth']:.1f}%",
-            "Pivot": round(item["pivot"], 2), "Breakout": dates[item["breakout_i"]].strftime("%d %b %y"),
-            "Volume": f"{item['vol_x']:.1f}×" if np.isfinite(item["vol_x"]) else "—",
-            "Then": f"{item['status']} · best {item['best']:+.1f}% · now {item['now']:+.1f}%",
-            "_start": dates[item["start_i"]].strftime("%Y-%m-%d"),
-            "_end": dates[item["end_i"]].strftime("%Y-%m-%d"),
-            "_breakout": dates[item["breakout_i"]].strftime("%Y-%m-%d"),
-            "_pivot": item["pivot"],
-            "_status": item["status"], "_best": item["best"], "_now": item["now"],
+            "Base": f"B{number}", "Started": f"{dates[item['start_i']]:%d %b %y}",
+            "Length": f"{max(1, round(item['span'] / 5))} wk", "Depth": f"{item['depth']:.0f}%",
+            "Pivot": _fmt_price(item["pivot"]), "Breakout": item["breakout"], "Volume": item["volume"],
+            "Then": item["then"],
+            "_n": number, "_start": f"{dates[item['start_i']]:%Y-%m-%d}",
+            "_end": f"{dates[stop_i]:%Y-%m-%d}", "_forming": bool(item["forming"]),
+            "_breakout": "" if item["breakout_i"] is None else f"{dates[item['breakout_i']]:%Y-%m-%d}",
+            "_pivot": float(item["pivot"]), "_low": float(item["low"]),
+            "_status": item["status"], "_best": float(item["best"]), "_now": float(item["now"]),
         })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows[::-1])
 
 
 def fetch_chart_payload(symbol: str, period: str) -> dict:
@@ -787,25 +835,57 @@ def _chart_dialog(func):
         return st.dialog("Stock chart", width="large")(func), False
 
 
-_DIALOG_CSS = """<style>
-div[role="dialog"] [data-testid="stVerticalBlock"]{gap:.55rem}
-.mp-dh{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.mp-sym{font-size:1.25rem;font-weight:800;letter-spacing:.01em}
-.mp-co{display:block;font-size:.8rem;opacity:.65;margin-top:1px}
-.mp-px{text-align:right;white-space:nowrap}
-.mp-px b{font-size:1.2rem;display:block;line-height:1.2}
-.mp-px span{font-size:.82rem;font-weight:700}
-.mp-up{color:#22c55e}.mp-dn{color:#ef4444}
-.mp-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.mp-badges span{font-size:.74rem;font-weight:600;padding:2px 9px;border-radius:999px;
-border:1px solid color-mix(in srgb,currentColor 18%,transparent);background:color-mix(in srgb,currentColor 6%,transparent)}
-.mp-bh{padding:7px 0;border-bottom:1px solid color-mix(in srgb,currentColor 12%,transparent)}
-.mp-bh:last-child{border-bottom:0}
-.mp-bh1{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.86rem}
-.mp-bh1 span{font-weight:700;white-space:nowrap}
-.mp-bh2{font-size:.76rem;opacity:.65;margin-top:2px}
-@media(max-width:560px){.mp-sym{font-size:1.1rem}.mp-px b{font-size:1.05rem}.mp-co{font-size:.74rem}}
+_BASE_TABLE_CSS = """<style>
+.mp-bt{border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:12px;padding:12px 14px 10px}
+.mp-bt h4{margin:0 0 6px;font-size:.98rem;font-weight:700}
+.mp-bt h4 small{font-weight:400;opacity:.62;margin-left:6px;font-size:.8rem}
+.mp-bt table{width:100%;border-collapse:collapse;font-size:.84rem;border:0}
+.mp-bt th,.mp-bt td{border-left:0;border-right:0;background:transparent}
+.mp-bt th{border-top:0;border-bottom:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+.mp-bt th{font-weight:600;opacity:.7;text-align:right;padding:6px 8px;font-size:.78rem;white-space:nowrap}
+.mp-bt td{padding:8px;text-align:right;border-top:1px solid color-mix(in srgb,currentColor 12%,transparent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-bt th:first-child,.mp-bt td:first-child{text-align:left;font-weight:700}
+.mp-bt th:last-child,.mp-bt td:last-child{text-align:left;white-space:normal}
+.mp-bt .i{opacity:.5;font-size:.7rem;margin-left:3px;cursor:help}
+.mp-bt .fail{color:#ef4444;font-weight:600}.mp-bt .form{color:#3b82f6;font-weight:600}.mp-bt .hold{color:#22c55e;font-weight:600}
+.mp-bt .note{margin:8px 0 0;font-size:.74rem;opacity:.62;line-height:1.4}
+@media(max-width:640px){
+ .mp-bt thead{display:none}.mp-bt table,.mp-bt tbody{display:block}
+ .mp-bt tr{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 8px;padding:10px 0;border-top:1px solid color-mix(in srgb,currentColor 12%,transparent)}
+ .mp-bt td{display:block;border:0;padding:0;text-align:left;white-space:normal}
+ .mp-bt td::before{content:attr(data-l);display:block;font-size:.66rem;font-weight:500;opacity:.55}
+ .mp-bt td:first-child::before{content:none}.mp-bt td:first-child{font-size:1.05rem;align-self:end}
+ .mp-bt td:last-child{grid-column:1/-1}
+}
 </style>"""
+
+
+def _base_table_html(records) -> str:
+    """The 'Base history' card: one row per base, newest first (numbers match the chart circles)."""
+    rows = []
+    for r in records:
+        if not r.get("Base"):
+            continue
+        then = _esc(str(r["Then"]))
+        word, _, rest = then.partition(" ")
+        cls = {"Failed": "fail", "Forming": "form", "Holding": "hold"}.get(word, "")
+        then_html = f'<span class="{cls}">{word}</span> {rest}' if cls else then
+        rows.append(
+            f'<tr><td data-l="Base">{_esc(str(r["Base"]))}</td><td data-l="Started">{_esc(str(r["Started"]))}</td>'
+            f'<td data-l="Length">{_esc(str(r["Length"]))}</td><td data-l="Depth">{_esc(str(r["Depth"]))}</td>'
+            f'<td data-l="Pivot">{_esc(str(r["Pivot"]))}</td><td data-l="Breakout">{_esc(str(r["Breakout"]))}</td>'
+            f'<td data-l="Volume">{_esc(str(r["Volume"]))}</td><td data-l="Then">{then_html}</td></tr>')
+    if not rows:
+        return ""
+    head = ('<thead><tr><th>Base<span class="i" title="B-numbers match the circles on the chart; B1 is the oldest.">ⓘ</span></th>'
+            '<th>Started</th><th>Length</th><th>Depth</th>'
+            '<th>Pivot<span class="i" title="The base high. A close above it is the breakout.">ⓘ</span></th>'
+            '<th>Breakout</th><th>Volume<span class="i" title="Breakout-day volume vs the 50-day average.">ⓘ</span></th>'
+            '<th>Then</th></tr></thead>')
+    return (_BASE_TABLE_CSS + '<div class="mp-bt"><h4>Base history<small>last 12 months · newest first</small></h4>'
+            f'<table>{head}<tbody>{"".join(rows)}</tbody></table>'
+            '<p class="note">Bases follow the chart\'s Bases indicator. Failed = closed 8% under the pivot or below '
+            'the 50-day average after the breakout. History, not a forecast.</p></div>')
 
 
 def _num(row, key, default=None):
@@ -817,56 +897,38 @@ def _num(row, key, default=None):
     return default if value != value else value
 
 
-def _dialog_header(symbol, row, latest, change, benchmark) -> str:
-    company = _esc(str(row.get("Company Name", ""))) if row is not None else ""
-    sector = _esc(str(row.get("Sector", ""))) if row is not None else ""
-    sub = " · ".join(x for x in (company, sector) if x and x.lower() != "nan")
-    cls = "mp-up" if change >= 0 else "mp-dn"
-    badges = []
+def _chart_info(symbol, row, bars, benchmark) -> dict:
+    """Header details for the chart (symbol, price, RS, stage, sector, RS-line changes)."""
+    latest = bars[-1]
+    prior = bars[-2]["close"] if len(bars) > 1 else latest["close"]
+    info = {"symbol": symbol, "company": "", "sector": "", "sectorBadge": "",
+            "price": latest["close"], "change": (latest["close"] / prior - 1) * 100 if prior else 0.0,
+            "asOf": latest["date"], "rs": None, "rsChange": 0, "stage": "",
+            "benchmark": {"^CRSLDX": "Nifty 500", "^NSEI": "Nifty 50"}.get(benchmark, "index")}
     if row is not None:
-        rs = _num(row, "RS_Rating")
-        if rs is not None:
-            badges.append(f"RS {int(rs)}")
+        company, sector = str(row.get("Company Name", "") or ""), str(row.get("Sector", "") or "")
+        info["company"] = "" if company == "nan" else company
+        info["sector"] = "" if sector == "nan" else sector
+        rank, strength = _num(row, "Sector_Rank"), _num(row, "Sector_Strength")
+        if rank is not None:
+            info["sectorBadge"] = f"Sector #{int(rank)}" + (f" · {int(strength)}" if strength is not None else "")
+        rs, change = _num(row, "RS_Rating"), _num(row, "RS_Change", 0)
+        info["rs"] = None if rs is None else int(rs)
+        info["rsChange"] = int(change or 0)
         stage = str(row.get("Stage", "") or "")
-        if stage and stage != "nan":
-            badges.append(_esc(stage))
-        tt = _num(row, "TT_Score")
-        if tt is not None:
-            badges.append(f"TT {int(tt)}/8")
-        off_high = _num(row, "Pct_From_52W_High")
-        if off_high is not None:
-            badges.append(f"{off_high:+.1f}% from 52W high")
-    badges.append("RS vs " + {"^CRSLDX": "Nifty 500", "^NSEI": "Nifty 50"}.get(benchmark, "index n/a"))
-    chips = "".join(f"<span>{b}</span>" for b in badges)
-    return (f'<div class="mp-dh"><div><span class="mp-sym">{_esc(symbol)}</span>'
-            f'<span class="mp-co">{sub}</span></div>'
-            f'<div class="mp-px"><b>₹{latest["close"]:,.2f}</b>'
-            f'<span class="{cls}">{"▲" if change >= 0 else "▼"} {abs(change):.2f}%</span></div></div>'
-            f'<div class="mp-badges">{chips}</div>')
-
-
-def _base_history_html(records) -> str:
-    """Responsive two-line rows (dates + outcome / depth, volume, peak) instead of a wide table."""
-    items = []
-    for r in records:
-        status = r.get("_status")
-        if status is None:
-            continue
-        holding = status == "Holding"
-        cls = "mp-up" if holding else "mp-dn"
-        icon = "▲" if r["_now"] >= 0 else "▼"
-        items.append(
-            '<div class="mp-bh"><div class="mp-bh1"><b>'
-            f'{_esc(str(r["Started"]))} → {_esc(str(r["Breakout"]))}</b>'
-            f'<span class="{cls}">{icon} {_esc(status)} {r["_now"]:+.0f}%</span></div>'
-            f'<div class="mp-bh2">Depth {_esc(str(r["Depth"]))} · Volume {_esc(str(r["Volume"]))}'
-            f' · Peak {r["_best"]:+.0f}% after breakout</div></div>')
-    return "".join(items)
+        info["stage"] = "" if stage == "nan" else stage
+    series = [b["rs"] for b in bars]
+    periods = []
+    for label, lookback in (("1M", 21), ("3M", 63), ("6M", 126), ("12M", 252)):
+        old, now = series[max(0, len(series) - 1 - lookback)], series[-1]
+        periods.append([label, (now / old - 1) * 100 if old and now else None])
+    info["rsPeriods"] = periods
+    return info
 
 
 def _show_symbol_chart_dialog(symbol: str) -> None:
     symbol = str(symbol).strip().upper()
-    period = "5y"  # fetched once; the range buttons inside the chart only zoom
+    period = "5y"  # fetched once; D/W/M and the range buttons work in the browser
     payload = st.session_state.get("symbol_chart_dialog_data")
     if not payload or payload.get("symbol") != symbol or payload.get("period") != period:
         try:
@@ -883,26 +945,31 @@ def _show_symbol_chart_dialog(symbol: str) -> None:
     if not bars:
         st.info("No daily history is available for this symbol.")
         return
-    st.markdown(_DIALOG_CSS, unsafe_allow_html=True)
     row_match = result[result["Symbol"].astype(str) == symbol]
     row = row_match.iloc[0] if not row_match.empty else None
-    latest = bars[-1]
-    prior = bars[-2]["close"] if len(bars) > 1 else latest["close"]
-    change = (latest["close"] / prior - 1) * 100 if prior else 0.0
-    st.markdown(_dialog_header(symbol, row, latest, change, payload["benchmark"]), unsafe_allow_html=True)
-    chart_slot = st.container()   # filled below, once the base / pivot inputs are known
-
+    info = _chart_info(symbol, row, bars, payload["benchmark"])
     as_of = datetime.strptime(payload["dates"][-1], "%Y-%m-%d").date()
-    suggested_start = datetime.strptime(payload["dates"][max(0, len(payload["dates"]) - 61)], "%Y-%m-%d").date()
-    first_day = datetime.strptime(payload["dates"][0], "%Y-%m-%d").date()
-    start_key, end_key = f"dialog_base_start_{symbol}", f"dialog_base_end_{symbol}"
-    st.session_state.setdefault(start_key, suggested_start)
-    st.session_state.setdefault(end_key, as_of)
-    start_saved = max(first_day, min(st.session_state[start_key], as_of))
-    end_saved = max(start_saved, min(st.session_state[end_key], as_of))
-    st.session_state[start_key], st.session_state[end_key] = start_saved, end_saved
+    footer = (f"Chart and indicators: end-of-day data as of {as_of:%Y-%m-%d} · NSE / Yahoo Finance · "
+              "may contain errors · research and education only")
 
-    with st.expander("Base & pivot markers", expanded=False):
+    chart_slot = st.container()   # filled below, once the optional manual marker is known
+    table_html = _base_table_html(payload["base_history"])
+    if table_html:
+        st.markdown(table_html, unsafe_allow_html=True)
+    else:
+        st.info("No completed or forming bases matching the rolling history rule were found.")
+
+    marker = {"start": "", "end": "", "pivot": 0.0}
+    with st.expander("Custom base marker (optional)", expanded=False):
+        first_day = datetime.strptime(payload["dates"][0], "%Y-%m-%d").date()
+        suggested = datetime.strptime(payload["dates"][max(0, len(payload["dates"]) - 61)], "%Y-%m-%d").date()
+        start_key, end_key = f"dialog_base_start_{symbol}", f"dialog_base_end_{symbol}"
+        st.session_state.setdefault(start_key, suggested)
+        st.session_state.setdefault(end_key, as_of)
+        start_saved = max(first_day, min(st.session_state[start_key], as_of))
+        st.session_state[start_key] = start_saved
+        st.session_state[end_key] = max(start_saved, min(st.session_state[end_key], as_of))
+        draw = st.checkbox("Draw this marker on the chart", key=f"dialog_marker_on_{symbol}")
         c1, c2, c3 = st.columns(3)
         with c1:
             base_start = st.date_input("Base start", min_value=first_day, max_value=as_of, key=start_key)
@@ -918,22 +985,14 @@ def _show_symbol_chart_dialog(symbol: str) -> None:
                                         key=f"dialog_pivot_{symbol}_{start_text}_{end_text}")
             depth = (default_pivot - min(bar["low"] for bar in base_bars)) / default_pivot * 100
             st.caption(f"Selected base depth **{depth:.1f}%** · {len(base_bars)} sessions")
+            if draw:
+                marker = {"start": start_text, "end": end_text, "pivot": pivot}
         else:
             st.warning("Choose dates that contain chart candles.")
-            pivot = max(bar["high"] for bar in bars[-60:])
 
     with chart_slot:
-        ui.chart_explorer(bars, symbol, start_text, end_text, pivot,
-                          payload["base_history"], visible_window="1Y")
-
-    with st.expander("Base history · last 12 months", expanded=False):
-        history_html = _base_history_html(payload["base_history"])
-        if not history_html:
-            st.info("No completed bases matching the rolling history rule were found.")
-        else:
-            st.markdown(history_html, unsafe_allow_html=True)
-            st.caption("Dates run from base start to breakout. Rolling OHLCV estimates, not a forecast.")
-    st.caption(f"Prices through {as_of:%d %b %Y} · Yahoo Finance · session-only data, nothing is saved to project files.")
+        ui.chart_explorer(bars, symbol, marker["start"], marker["end"], marker["pivot"],
+                          payload["base_history"], visible_window="1Y", info=info, footer=footer)
     if not _DIALOG_HAS_DISMISS and st.button("Close chart", key=f"close_chart_dialog_{symbol}"):
         _clear_chart_request()
         st.rerun()
@@ -1145,14 +1204,11 @@ elif active_screen == "chart":
                 st.metric("Selected base depth", f"{base_depth:.1f}%", help="(Highest high − lowest low) ÷ highest high for the selected dates.")
             ui.chart_explorer(loaded["bars"], chart_symbol, start_text, end_text, pivot,
                               loaded.get("base_history", []), visible_window=visible_window)
-            st.markdown("#### Base history · last 12 months")
-            history_rows = pd.DataFrame(loaded.get("base_history", []))
-            if not history_rows.empty:
-                st.dataframe(history_rows[["Base", "Started", "Length", "Depth", "Pivot", "Breakout", "Volume", "Then"]],
-                             hide_index=True, use_container_width=True)
-                st.caption("Historical bases are estimated from daily OHLCV using a rolling range and drift rule; breakout, volume, and outcome labels are calculated heuristically. Past outcomes are history, not a forecast.")
+            page_table = _base_table_html(loaded.get("base_history", []))
+            if page_table:
+                st.markdown(page_table, unsafe_allow_html=True)
             else:
-                st.info("No completed bases matching the history rule were found in the last year of this chart data.")
+                st.info("No completed or forming bases matching the rolling history rule were found in this chart data.")
             st.caption(f"{len(loaded['bars'])} daily candles · prices through {last_day:%d %b %Y} · source: Yahoo Finance. Chart history, RS series and base records are session-only and are not saved to project files.")
     elif loaded:
         st.info("Choose the loaded symbol and history range above, or load a new chart.")
