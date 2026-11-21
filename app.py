@@ -835,6 +835,17 @@ def _chart_dialog(func):
         return st.dialog("Stock chart", width="large")(func), False
 
 
+_DIALOG_CSS = """<style>
+[data-testid="stDialog"] section[role="dialog"] h2{padding:10px 56px 0 20px;min-height:0;opacity:.75}
+[data-testid="stDialog"] section[role="dialog"] h2,[data-testid="stDialog"] section[role="dialog"] h2 p{font-size:.8rem;font-weight:600;line-height:1.3}
+[data-testid="stDialog"] section[role="dialog"] h2 span{margin-right:0}
+[data-testid="stDialog"] section[role="dialog"] > button{z-index:20}
+[data-testid="stDialog"] section[role="dialog"] > div:last-child{padding:4px 20px 16px}
+[data-testid="stDialog"] [data-testid="stVerticalBlock"]{gap:.4rem}
+[data-testid="stDialog"] [data-testid="stElementContainer"]:has(.mp-dcss){display:none}
+</style><span class="mp-dcss"></span>"""
+
+
 _BASE_TABLE_CSS = """<style>
 .mp-bt{border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:12px;padding:12px 14px 10px}
 .mp-bt h4{margin:0 0 6px;font-size:.98rem;font-weight:700}
@@ -928,6 +939,7 @@ def _chart_info(symbol, row, bars, benchmark) -> dict:
 
 def _show_symbol_chart_dialog(symbol: str) -> None:
     symbol = str(symbol).strip().upper()
+    st.markdown(_DIALOG_CSS, unsafe_allow_html=True)   # compact title row and spacing for this dialog
     period = "5y"  # fetched once; D/W/M and the range buttons work in the browser
     payload = st.session_state.get("symbol_chart_dialog_data")
     if not payload or payload.get("symbol") != symbol or payload.get("period") != period:

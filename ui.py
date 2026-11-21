@@ -488,8 +488,8 @@ _CHART_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
 font:12.5px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-body{display:flex;flex-direction:column;gap:7px}
-#hd{display:flex;flex-direction:column;gap:6px}
+body{display:flex;flex-direction:column;gap:4px}
+#hd{display:flex;flex-direction:column;gap:3px}
 .r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .sym{font:800 24px/1.05 Georgia,"Times New Roman",serif;letter-spacing:.01em}
 .co{font-size:14px;font-weight:600}
@@ -502,7 +502,7 @@ color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
 .up{color:var(--up)}.dn{color:var(--dn)}
 .lab{font-weight:700;opacity:.8}
 .rsd{font-weight:700;font-size:12px}
-.rsp{font-size:11.5px;opacity:.9}
+.rsp{display:inline-flex;align-items:baseline;flex-wrap:wrap;font-size:11.5px;opacity:.95;margin-left:6px}
 .rsp b{font-weight:700}
 .rsp .k{opacity:.6;margin-left:7px;margin-right:2px}
 #bar,#chips{display:flex;align-items:center;gap:8px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
@@ -566,14 +566,13 @@ function header(){
   if(I.sectorBadge)r1+='<span class="pill" style="--c:#2563eb">'+esc(I.sectorBadge)+'</span>';
   if(I.sector)r1+='<span class="sub">'+esc(I.sector)+'</span>';
   r1+='</div>';
-  let r2='<div class="r"><span class="px">'+fmt(I.price).replace(/\.00$/,'')+'</span><span class="chg '+(up?'up':'dn')+'">'+sgn(I.change,2)+'%'+(I.asOf?' on '+esc(I.asOf):'')+'</span>';
+  let r2='<div class="r"><span class="px">'+fmt(I.price).replace(/\.00$/,'')+'</span><span class="chg '+(up?'up':'dn')+'">'+sgn(I.change,2)+'%<span class="asof">'+(I.asOf?' on '+esc(I.asOf):'')+'</span></span>';
   if(I.rs!=null)r2+='<span class="lab">RS</span><span class="pill solid" style="--c:#15803d">'+I.rs+'</span>'+(I.rsChange?'<span class="rsd '+(I.rsChange>0?'up':'dn')+'">'+(I.rsChange>0?'+':'')+I.rsChange+'</span>':'');
   if(st)r2+='<span class="pill solid" style="--c:'+sc+'">'+esc(st)+'</span>';
+  if(I.rsPeriods&&I.rsPeriods.length)r2+='<span class="rsp"><span class="lab">RS line<span class="long"> vs '+esc(I.benchmark||'index')+'</span></span>'+
+    I.rsPeriods.map(p=>'<span class="k">'+p[0]+'</span><b class="'+(p[1]==null?'':p[1]>=0?'up':'dn')+'">'+(p[1]==null?'–':sgn(p[1],1)+'%')+'</b>').join('')+'</span>';
   r2+='</div>';
-  let r3='';
-  if(I.rsPeriods&&I.rsPeriods.length)r3='<div class="r rsp"><span class="lab">RS line<span class="long"> vs '+esc(I.benchmark||'index')+'</span></span>'+
-    I.rsPeriods.map(p=>'<span class="k">'+p[0]+'</span><b class="'+(p[1]==null?'':p[1]>=0?'up':'dn')+'">'+(p[1]==null?'–':sgn(p[1],1)+'%')+'</b>').join('')+'</div>';
-  $('hd').innerHTML=r1+r2+r3;
+  $('hd').innerHTML=r1+r2;
 }
 
 /* ---------- theme ---------- */
