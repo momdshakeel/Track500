@@ -43,6 +43,38 @@ font = st.session_state.get("appearance_font", list(ui.FONTS)[0])
 density = st.session_state.get("appearance_density", "Comfortable")
 ui.inject_css(font)
 
+# ---------------- Page skeleton ----------------
+# Containers are created in the order they appear on the page and filled later, so the filter
+# widgets can run before the stat cards are counted while the layout stays top-to-bottom.
+slot_notice = st.container()
+slot_header = st.container()
+slot_pills = st.container()
+slot_stats = st.container()
+slot_tabs = st.container()
+slot_view = st.container()
+with slot_view:
+    with st.container(key="view-row"):
+        v_title, v_filters, v_columns = st.columns([6, 1.2, 2], gap="small", vertical_alignment="center")
+
+
+_view_row_columns = {"used": False}   # only the first table on a screen takes the button in the view row
+
+
+def _popover(container, label, **kwargs):
+    """A popover button; falls back for Streamlit versions with the older width option."""
+    try:
+        return container.popover(label, width="stretch", **kwargs)
+    except TypeError:
+        return container.popover(label, use_container_width=True, **kwargs)
+
+
+def _open_stock_search():
+    """Top search box: choosing a stock opens its chart dialog, then the box clears itself."""
+    pick = st.session_state.get("top_stock_search")
+    if pick:
+        st.session_state["_symbol_chart_request"] = str(pick).split(" · ", 1)[0].strip()
+    st.session_state["top_stock_search"] = None
+
 
 # ---------------- Data loading (cached, shared by all visitors) ----------------
 DATA_DIR = os.path.join(HERE, "data")
@@ -187,27 +219,32 @@ def reload_latest_data():
     st.rerun()
 
 
-ui.hero("MarketPulse 750",
-        "RS, trend, VCP and breakout scans across the Nifty Total Market (Nifty 500 + Microcap 250).",
-        [f"<b>As of</b> {as_of:%d %b %Y}", f"<b>Updated</b> {fetched_at:%d %b, %H:%M} IST",
-         f"<b>{len(result)}</b> of {n_universe} stocks rated", f"<b>{n_liquid}</b> liquid",
-         f"<b>Market breadth</b> {market_context['market_state']}"],
-        eyebrow="Nifty Total Market · Momentum & relative strength")
+with slot_header:
+    head_left, head_right = st.columns([3, 1.15], gap="small", vertical_alignment="center")
+    with head_left:
+        ui.brand("MarketPulse 750", "Nifty Total Market · Momentum &amp; relative strength",
+                 "RS, trend, VCP and breakout scans across the Nifty Total Market (Nifty 500 + Microcap 250).")
+    with head_right:
+        _names = result["Company Name"].fillna("").astype(str)
+        search_labels = sorted(f"{sym} · {name}" if name else str(sym)
+                               for sym, name in zip(result["Symbol"].astype(str), _names))
+        st.selectbox("Search any stock", search_labels, index=None, placeholder="Search any stock…",
+                     key="top_stock_search", label_visibility="collapsed", on_change=_open_stock_search)
+with slot_pills:
+    ui.pills([f"<b>As of</b> {as_of:%d %b %Y}", f"<b>Updated</b> {fetched_at:%d %b, %H:%M} IST",
+              f"<b>{len(result)}</b> of {n_universe} stocks rated", f"<b>{n_liquid}</b> liquid",
+              f"<b>Market breadth</b> {market_context['market_state']}"])
 age_days = (datetime.now(IST).date() - as_of.date()).days
 if mode == "saved" and age_days > 4:
-    st.warning(f"⚠️ This data is from {as_of:%d %b %Y} ({age_days} days ago). The daily job may have "
-               f"stopped - open your GitHub repository's **Actions** tab to check.")
+    with slot_notice:
+        st.warning(f"⚠️ This data is from {as_of:%d %b %Y} ({age_days} days ago). The daily job may have "
+                   f"stopped - open your GitHub repository's **Actions** tab to check.")
 
 # ---------------- Appearance and filters ----------------
 custom_rules = []
-with st.sidebar:
-    with st.expander("🎨 Appearance", expanded=False):
-        font = st.selectbox("Font", list(ui.FONTS), index=0, key="appearance_font")
-        density = st.radio("Table density", ["Comfortable", "Compact"], horizontal=True,
-                           key="appearance_density")
-        st.caption("Light / dark: open the ⋮ menu (top right) → Settings → Theme. "
-                   "The app follows your device by default.")
-    st.subheader("Filters")
+filters_pop = _popover(v_filters, "Filters", icon=":material/tune:")
+with filters_pop:
+    st.markdown("##### Filters")
     liquid_only = st.toggle("Liquid stocks only", value=False, key="filter_liquid_only",
                             help=f"Liquid = {LIQ_TEXT}. Applies to the stock lists. Breadth and sector "
                                  f"figures always use liquid stocks.")
@@ -280,29 +317,32 @@ with st.sidebar:
                 threshold = st.number_input("Value", value=middle, step=step, format="%.2f",
                                             key=f"custom_value_{field}")
                 custom_rules.append((field, operator, threshold, None))
+    with st.expander("🎨 Appearance", expanded=False):
+        font = st.selectbox("Font", list(ui.FONTS), index=0, key="appearance_font")
+        density = st.radio("Table density", ["Comfortable", "Compact"], horizontal=True,
+                           key="appearance_density")
+        st.caption("Light / dark: open the ⋮ menu (top right) → Settings → Theme. "
+                   "The app follows your device by default.")
     st.divider()
     st.caption(f"Prices as of **{as_of.date()}**  \nUpdated {fetched_at:%d %b %Y, %H:%M} IST  \n" +
                ("Refreshed automatically every weekday evening (~5 pm IST)" if mode == "saved"
                 else f"Live calculation - refreshes every {CACHE_HOURS} hours"))
-    if st.button("🔄 Reload latest data", use_container_width=True, key="reload_sidebar"):
+    if st.button("🔄 Reload latest data", use_container_width=True, key="reload_filters"):
         reload_latest_data()
 
 if st.session_state.pop("latest_data_refresh_notice", False):
     if remote_data_error is None and mode == "saved":
-        with st.sidebar:
-            st.success("Loaded the latest scan files from GitHub.")
+        st.toast("Loaded the latest scan files from GitHub.", icon="✅")
     elif remote_data_error is not None:
-        with st.sidebar:
-            st.error("GitHub refresh failed; showing the deployed copy if available.")
+        st.toast("GitHub refresh failed; showing the deployed copy if available.", icon="⚠️")
     else:
-        with st.sidebar:
-            st.info("No saved scan found; calculating data live.")
+        st.toast("No saved scan found; calculating data live.", icon="ℹ️")
 
 ui.inject_css(font)
 
 # ---------------- Apply filters ----------------
 def apply_stock_filters(frame):
-    """Apply the current sidebar stock filters to a current or historical scan."""
+    """Apply the current Filters to a current or historical scan."""
     filtered = frame
     if liquid_only and "Liquid" in filtered.columns:
         filtered = filtered[filtered["Liquid"]]
@@ -372,15 +412,15 @@ else:
     momentum_candidates = df.iloc[0:0].copy()
 
 # ---------------- KPI cards ----------------
-ui.kpis([
-    ("Top picks", len(top), f"RS ≥ {pref_rs} · trend · RS line", "#10b981"),
-    ("Trend Template", len(tt), "8 rules pass", "#6366f1"),
-    ("VCP setups", len(vcp), "tight · near pivot", "#8b5cf6"),
-    ("Volume breakouts", len(brk), f"last {m.BREAKOUT_RECENT_DAYS} days", "#f97316"),
-    ("Stage 1 bases", len(s1), "early setups", "#3b82f6"),
-    ("RS blue dot", len(blue), "RS line leads", "#ec4899"),
-    ("Liquid stocks", n_liquid, f"of {len(result)} · ≥ ₹{m.MIN_TRADED_VALUE_CR:.0f} cr/day", "#14b8a6"),
-])
+with slot_stats:
+    ui.kpis([
+        ("Top Picks", len(top), f"RS ≥ {pref_rs} · trend · RS line", ""),
+        ("Trend Template", len(tt), "8 rules pass", ""),
+        ("VCP Setups", len(vcp), "tight · near pivot", ""),
+        ("Volume Breakouts", len(brk), f"last {m.BREAKOUT_RECENT_DAYS} days", ""),
+        ("Stage 1 Bases", len(s1), "early setups", ""),
+        ("RS Blue Dot", len(blue), "RS line leads", ""),
+    ])
 
 
 def _reset_columns(state_key, defaults):
@@ -401,7 +441,12 @@ def choose_table_columns(frame, defaults, key, label="Visible columns"):
         if "Chg_1D_%" in default_keys and "Chg_1D_%" not in st.session_state[state_key]:
             st.session_state[state_key] = [*st.session_state[state_key], "Chg_1D_%"]
     st.session_state[migration_key] = True
-    with st.expander("⚙️ Customize columns", expanded=False):
+    if not _view_row_columns["used"]:
+        _view_row_columns["used"] = True
+        column_panel = _popover(v_columns, "Customize columns", icon=":material/view_column:")
+    else:  # a second table on the same screen keeps its own expander beside it
+        column_panel = st.expander("⚙️ Customize columns", expanded=False)
+    with column_panel:
         selected = st.multiselect(
             label,
             available,
@@ -492,7 +537,9 @@ def stock_strength_map(frame, key):
 
 def show(frame, name, text, keys=None, sort=("RS_Rating", -1), titles=None, scan_date=None,
          history_dates=None, history_key=None):
-    ui.note(f"<b>{len(frame)}</b> stocks · {text}")
+    note_col, view_col = st.columns([5, 1.7], gap="small", vertical_alignment="center")
+    with note_col:
+        ui.note(f"<b>{len(frame)}</b> stocks · {text}")
     if custom_rules:
         rule_labels = []
         for field, operator, lower_or_value, upper in custom_rules:
@@ -502,8 +549,9 @@ def show(frame, name, text, keys=None, sort=("RS_Rating", -1), titles=None, scan
                 else f"{label} {'≥' if operator == 'At least' else '≤'} {lower_or_value:g}"
             )
         st.caption("Custom conditions (AND): " + " · ".join(rule_labels))
-    view = st.segmented_control("View", ["List", "Strength map"], default="List",
-                                key=f"result_view_{name}")
+    with view_col:
+        view = st.segmented_control("View", ["List", "Strength map"], default="List",
+                                    key=f"result_view_{name}", label_visibility="collapsed")
     if view == "Strength map":
         stock_strength_map(frame, name)
     else:
@@ -521,7 +569,7 @@ def show(frame, name, text, keys=None, sort=("RS_Rating", -1), titles=None, scan
             index=history_dates.index(scan_date) if scan_date in history_dates else 0,
             key=history_key,
             format_func=lambda value: f"Scan ({datetime.fromisoformat(value).strftime('%a, %d %b %Y')})",
-            help="History is retained for the most recent 30 calendar days. Sidebar filters are applied to the selected scan.",
+            help="History is retained for the most recent 30 calendar days. The Filters are applied to the selected scan.",
         )
         st.caption(f"Results above use the {selected_date} scan. Header metrics still show the latest scan.")
     if not frame.empty:
@@ -1098,18 +1146,18 @@ def show_symbol_chart_dialog(symbol: str) -> None:
     decorator(_show_symbol_chart_dialog)(symbol)
 
 
-SCREEN_LIBRARY = {
-    "🏆  Discovery · Top picks": "top",
-    "✨  Discovery · Momentum Candidates": "momentum",
-    "💪  Strength · Trend Template": "trend",
-    "🧩  Setups · VCP setups": "vcp",
-    "🚀  Setups · Breakouts": "breakouts",
-    "🧱  Setups · Stage 1 bases": "bases",
-    "🔵  Strength · RS blue dot": "blue_dot",
-    "🌐  Market · Breadth & sectors": "market",
-    "📈  Tools · Chart Explorer": "chart",
-    "📋  Universe · All stocks": "all",
-    "📖  Learn · How to use this scanner": "guide",
+SCREEN_TABS = {
+    "Top Picks": "top",
+    "Momentum Leader": "momentum",
+    "Trend Template": "trend",
+    "VCP Setup": "vcp",
+    "Volume Breakout": "breakouts",
+    "Stage 1 Bases": "bases",
+    "RS Blue Dot": "blue_dot",
+    "Breadth & Sectors": "market",
+    "How to Use This Scanner": "guide",
+    "Chart Explorer": "chart",
+    "All Stocks": "all",
 }
 SCREEN_DESCRIPTIONS = {
     "top": "A focused shortlist of high-RS stocks passing the trend and RS-line checks.",
@@ -1121,31 +1169,31 @@ SCREEN_DESCRIPTIONS = {
     "blue_dot": "Stocks whose relative-strength line leads price to a 52-week high.",
     "market": "Market participation, group strength, and the new rotation map.",
     "chart": "Search a stock and inspect daily candles, volume, moving averages, and a manually marked base and pivot.",
-    "all": "The full rated universe, with the current sidebar filters applied.",
+    "all": "The full rated universe, with the current Filters applied.",
     "guide": "Definitions and a practical workflow for reading scanner results.",
 }
-with st.container(border=True):
-    screen_picker, screen_summary = st.columns([1.05, 1.35], gap="small", vertical_alignment="center")
-    with screen_picker:
-        with st.container(key="screen-library-control"):
-            # Every screen is visible in the list, so typing is switched off (this also stops the
-            # on-screen keyboard from opening on phones). Older Streamlit lacks `filter_mode`.
-            library_args = dict(key="screen_library", help="Choose a scanner view. Screens are grouped by purpose.")
-            try:
-                selected_screen = st.selectbox("🗂️ Screen library", list(SCREEN_LIBRARY), filter_mode=None, **library_args)
-            except TypeError:
-                selected_screen = st.selectbox("🗂️ Screen library", list(SCREEN_LIBRARY), **library_args)
-    active_screen = SCREEN_LIBRARY[selected_screen]
-    if active_screen != "chart":
-        # Chart candles and derived bases are discarded when the user leaves this view.
-        st.session_state.pop("chart_explorer_data", None)
-    with screen_summary:
-        st.markdown(
-            f'<div class="screen-info"><div class="kicker">Selected view</div>'
-            f'<div class="heading">{selected_screen.split("·", 1)[-1].strip()}</div>'
-            f'<div class="description">{SCREEN_DESCRIPTIONS[active_screen]}</div></div>',
-            unsafe_allow_html=True,
-        )
+def _keep_screen_tab():
+    """A tab cannot be switched off: clicking the active tab again keeps it selected."""
+    if st.session_state.get("screen_tab") is None:
+        st.session_state["screen_tab"] = st.session_state.get("_last_screen_tab", "Top Picks")
+
+
+with slot_tabs:
+    with st.container(key="screen-tabs"):
+        tab_args = dict(key="screen_tab", default="Top Picks", label_visibility="collapsed", on_change=_keep_screen_tab)
+        try:
+            picked_tab = st.segmented_control("Screens", list(SCREEN_TABS), required=True, **tab_args)
+        except TypeError:  # older Streamlit: no `required`; the callback above keeps one tab selected
+            picked_tab = st.segmented_control("Screens", list(SCREEN_TABS), **tab_args)
+selected_screen = picked_tab or st.session_state.get("_last_screen_tab", "Top Picks")
+st.session_state["_last_screen_tab"] = selected_screen
+active_screen = SCREEN_TABS[selected_screen]
+if active_screen != "chart":
+    # Chart candles and derived bases are discarded when the user leaves this view.
+    st.session_state.pop("chart_explorer_data", None)
+with v_title:
+    st.markdown(f'<div class="viewhead"><b>{selected_screen}</b><span>{SCREEN_DESCRIPTIONS[active_screen]}</span></div>',
+                unsafe_allow_html=True)
 
 requested_chart_symbol = st.session_state.get("_symbol_chart_request")
 if requested_chart_symbol:
@@ -1159,7 +1207,7 @@ if active_screen == "top":
     show(top, "top_picks", f"Passes all 8 Trend Template conditions, <b>RS ≥ {pref_rs}</b>, RS line within 5% "
                            f"of its 52-week high and <b>RSI &gt; {rsi_min}</b>.")
 elif active_screen == "momentum":
-    st.markdown("### ✨ Momentum Candidates")
+    st.markdown("### ✨ Momentum Leader")
     st.caption("A rule-based shortlist for chart review. It does not confirm a breakout or issue a trade signal.")
     if not momentum_ready:
         st.warning("This deployment’s saved scan does not include the market trend gate yet. Push the code, then run **Daily scan** once to regenerate data.")
@@ -1481,8 +1529,8 @@ else:
     with f1:
         st.markdown("""<div class="guide-card"><h4>Keep the first pass broad</h4>
         <p>Start with the symbol/company search, sector filter and a modest minimum RS. Then narrow to liquid
-        stocks or raise the RS threshold if the list is still large. Use <b>Custom screen builder</b> in the
-        left sidebar to add up to three numeric conditions. Filters affect stock-list screens; the
+        stocks or raise the RS threshold if the list is still large. Use <b>Custom screen builder</b> inside the
+        <b>Filters</b> button to add up to three numeric conditions. Filters affect stock-list screens; the
         Breadth & sectors calculations use the liquid universe independently.</p></div>""", unsafe_allow_html=True)
     with f2:
         st.markdown("""<div class="guide-card"><h4>Open details, then the chart</h4>

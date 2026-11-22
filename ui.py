@@ -68,16 +68,12 @@ font-size:.66rem;white-space:nowrap;backdrop-filter:blur(8px)}
 .chip b{font-weight:600}
 
 /* KPI cards */
-.kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:2px 0 10px}
-.kpi{position:relative;overflow:hidden;border-radius:10px;padding:8px 9px 7px 13px;min-width:0;
-border:1px solid var(--line);background:color-mix(in srgb,var(--soft) 70%,transparent);
-transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
-.kpi:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--kc,var(--accent)) 48%,var(--line));
-box-shadow:0 8px 20px color-mix(in srgb,currentColor 7%,transparent)}
-.kpi:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--kc,var(--accent))}
-.kpi .l{font-size:.6rem;letter-spacing:.065em;text-transform:uppercase;opacity:.68;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kpi .v{font-size:1.42rem;font-weight:700;line-height:1.04;letter-spacing:-.02em;margin-top:2px}
-.kpi .s{font-size:.62rem;opacity:.64;margin-top:2px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:0}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0}
+.kpi{border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:6px;padding:10px 14px 9px;min-width:0;
+background:var(--soft)}
+.kpi .l{font-size:.64rem;letter-spacing:.05em;text-transform:uppercase;opacity:.7;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .v{font-size:1.35rem;font-weight:650;line-height:1.1;margin-top:3px}
+.kpi .s{font-size:.66rem;opacity:.6;margin-top:2px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* tabs as pills (works with old and new Streamlit tab markup) */
 [role="tablist"]{gap:8px!important;overflow-x:auto;border-bottom:none!important;box-shadow:none!important;
@@ -106,7 +102,7 @@ div[data-baseweb="select"]>div,.stTextInput input{border-radius:10px!important}
 .advdec{display:flex;height:14px;border-radius:99px;overflow:hidden;margin:6px 0 4px;background:var(--line)}
 .advdec .a{background:#10b981}.advdec .d{background:#ef4444}
 .advlbl{display:flex;justify-content:space-between;font-size:.8rem;font-weight:600;margin-bottom:14px}
-.tabnote{opacity:.72;font-size:.88rem;line-height:1.5;margin:2px 0 12px;max-width:1000px;overflow-wrap:anywhere}
+.tabnote{opacity:.72;font-size:.88rem;line-height:1.5;margin:2px 0 6px;max-width:1000px;overflow-wrap:anywhere}
 .tabnote b{font-weight:600}
 .screen-info{display:flex;flex-direction:column;justify-content:center;min-height:72px;padding:4px 2px}
 .screen-info .kicker{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;opacity:.55;font-weight:700}
@@ -122,7 +118,46 @@ border-color:color-mix(in srgb,var(--accent) 38%,var(--line))!important}
 border-color:color-mix(in srgb,var(--accent) 58%,var(--line))!important}
 div[data-testid="stSelectbox"] label{font-size:.76rem!important;font-weight:700!important;letter-spacing:.02em}
 div[data-testid="stSelectbox"] [data-baseweb="select"]>div{min-height:44px!important}
-@media (max-width:1100px) and (min-width:641px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* ---- dashboard chrome: header, pills, tabs, view row ---- */
+:root{--brand:color-mix(in srgb,#4f46e5 78%,currentColor);--muted:color-mix(in srgb,currentColor 62%,transparent)}
+[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlock"]{gap:.95rem}
+.mp-brand h1{margin:0;padding:0;font-size:1.3rem;line-height:1.2;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;color:var(--brand)}
+.mp-brand h1:before{content:"";width:16px;height:16px;border-radius:3px;background:var(--brand);flex:none}
+.mp-brand p{margin:3px 0 0;font-size:.78rem;line-height:1.35;color:var(--muted)}
+.st-key-top_stock_search [data-baseweb="select"]>div,.st-key-top_stock_search input{border-radius:6px!important}
+.st-key-top_stock_search{min-width:0}
+.pillrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:1px 0}
+.pillrow::-webkit-scrollbar{display:none}
+.pillrow span{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--soft);padding:5px 12px;border-radius:999px;font-size:.76rem;color:var(--muted)}
+.pillrow b{font-weight:600}
+.st-key-screen-tabs [data-testid="stElementContainer"]{width:100%!important}
+.st-key-screen-tabs [role="radiogroup"]{display:flex!important;flex-wrap:nowrap!important;gap:18px!important;width:100%;overflow-x:auto;
+border-bottom:1px solid var(--line);scrollbar-width:none;padding:0!important}
+.st-key-screen-tabs [role="radiogroup"]::-webkit-scrollbar{display:none}
+.st-key-screen-tabs button{flex:none;background:transparent!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;
+box-shadow:none!important;padding:10px 0 9px!important;min-height:0!important;color:var(--muted)!important;white-space:nowrap}
+.st-key-screen-tabs button p{font-size:.82rem!important;font-weight:600!important;margin:0}
+.st-key-screen-tabs button:hover{color:var(--brand)!important}
+.st-key-screen-tabs button[data-testid$="Active"],.st-key-screen-tabs button[aria-checked="true"],.st-key-screen-tabs button[aria-pressed="true"]{
+color:var(--brand)!important;border-bottom-color:var(--brand)!important}
+.viewhead{line-height:1.35}
+[data-testid="stMarkdownContainer"]:has(>.viewhead),[data-testid="stMarkdownContainer"]:has(>.mp-brand){margin-bottom:0!important}
+.viewhead b{font-size:.98rem;font-weight:700}
+.viewhead span{margin-left:8px;font-size:.82rem;color:var(--muted)}
+.viewhead span:before{content:"· "}
+.st-key-view-row button{border-radius:6px!important;min-height:34px!important;padding:.15rem .65rem!important;font-size:.8rem;border:1px solid var(--line)!important;background:transparent}
+.st-key-view-row button p{font-size:.8rem!important;font-weight:600}
+@media (max-width:640px){
+  .st-key-view-row [data-testid="stHorizontalBlock"]{flex-wrap:wrap;gap:.4rem}
+  .st-key-view-row [data-testid="stColumn"]{min-width:0!important;flex:1 1 calc(50% - .4rem)!important;width:auto!important}
+  .st-key-view-row [data-testid="stColumn"]:first-child{flex-basis:100%!important}
+  .st-key-screen-tabs [role="radiogroup"]{gap:16px!important}
+  .mp-brand h1{font-size:1.15rem}
+  .st-key-view-row button{padding:.15rem .4rem!important}
+  .st-key-view-row button p{font-size:.74rem!important}
+}
+@media (max-width:1100px) and (min-width:641px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){.sub{max-width:100%}.kpis{gap:8px}}
 @media (max-width:640px){
   .screen-info{min-height:0;padding:0 2px}
@@ -131,8 +166,7 @@ div[data-testid="stSelectbox"] [data-baseweb="select"]>div{min-height:44px!impor
   .sub{font-size:.76rem;line-height:1.32}.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:4px}
   .chip{font-size:.62rem;white-space:normal;overflow-wrap:anywhere;padding:3px 6px;text-align:center}
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:9px}
-  .kpi{padding:8px 8px 7px 12px;border-radius:9px}.kpi:before{width:3px}
-  .kpi:hover{transform:none}
+  .kpi{padding:8px 10px 7px}
   .kpi .l{font-size:.6rem}.kpi .v{font-size:1.24rem}.kpi .s{font-size:.62rem;line-height:1.15}
   [role="tablist"]{gap:6px!important;padding-bottom:8px}
   [role="tablist"] [role="tab"]{padding:7px 12px!important}
@@ -162,6 +196,7 @@ def inject_css(font: str, hide_sidebar: bool = False) -> None:
 
 
 def hero(title: str, subtitle: str, chips: list, eyebrow: str = "MarketPulse 750 · Nifty Total Market") -> None:
+    """Older header card (no longer used by the main page; kept for compatibility)."""
     chip_html = "".join(f'<span class="chip">{c}</span>' for c in chips)
     st.markdown(
         f'<div class="hero"><div><div class="eyebrow">{eyebrow}</div>'
@@ -169,23 +204,24 @@ def hero(title: str, subtitle: str, chips: list, eyebrow: str = "MarketPulse 750
         f'<div class="chips">{chip_html}</div></div>', unsafe_allow_html=True)
 
 
+def brand(title: str, tagline: str, description: str) -> None:
+    """Page title with the small logo mark, a tagline and a one-line description."""
+    st.markdown(f'<div class="mp-brand"><h1>{title}</h1><p>{tagline}</p><p>{description}</p></div>',
+                unsafe_allow_html=True)
+
+
+def pills(items: list) -> None:
+    """Single row of small status pills (as-of date, update time, counts)."""
+    st.markdown('<div class="pillrow">' + "".join(f"<span>{i}</span>" for i in items) + "</div>",
+                unsafe_allow_html=True)
+
+
 def kpis(items: list) -> None:
-    """items: (label, value, sub, colour)"""
+    """Stat cards. items: (label, value, sub, colour) - the colour is kept for old callers but unused."""
     cards = "".join(
-        f'<div class="kpi" style="flex:1 1 145px;min-width:120px;box-sizing:border-box;'
-        f'position:relative;overflow:hidden;border:1px solid rgba(100,116,139,.24);'
-        f'border-left:4px solid {c};border-radius:10px;padding:8px 9px 7px;'
-        f'background:rgba(100,116,139,.055);">'
-        f'<div class="l" style="font-size:.6rem;letter-spacing:.065em;text-transform:uppercase;'
-        f'font-weight:650;opacity:.72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{l}</div>'
-        f'<div class="v" style="font-size:1.42rem;font-weight:700;line-height:1.04;letter-spacing:-.02em;margin-top:2px;">{v}</div>'
-        f'<div class="s" style="font-size:.62rem;opacity:.68;margin-top:2px;line-height:1.15;'
-        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{s}</div></div>' for l, v, s, c in items)
-    st.markdown(
-        f'<div class="kpis" style="display:flex;flex-flow:row wrap;align-items:stretch;gap:8px;'
-        f'width:100%;margin:2px 0 10px;">{cards}</div>',
-        unsafe_allow_html=True,
-    )
+        f'<div class="kpi"><div class="l">{l}</div><div class="v">{v}</div><div class="s">{s}</div></div>'
+        for l, v, s, _c in items)
+    st.markdown(f'<div class="kpis">{cards}</div>', unsafe_allow_html=True)
 
 
 def meters(items: list) -> None:
