@@ -1156,7 +1156,6 @@ SCREEN_TABS = {
     "RS Blue Dot": "blue_dot",
     "Breadth & Sectors": "market",
     "How to Use This Scanner": "guide",
-    "Chart Explorer": "chart",
     "All Stocks": "all",
 }
 SCREEN_DESCRIPTIONS = {
@@ -1186,6 +1185,8 @@ with slot_tabs:
         except TypeError:  # older Streamlit: no `required`; the callback above keeps one tab selected
             picked_tab = st.segmented_control("Screens", list(SCREEN_TABS), **tab_args)
 selected_screen = picked_tab or st.session_state.get("_last_screen_tab", "Top Picks")
+if selected_screen not in SCREEN_TABS:  # e.g. a session that still remembers the removed tab
+    selected_screen = "Top Picks"
 st.session_state["_last_screen_tab"] = selected_screen
 active_screen = SCREEN_TABS[selected_screen]
 if active_screen != "chart":
