@@ -1125,15 +1125,16 @@ SCREEN_DESCRIPTIONS = {
     "guide": "Definitions and a practical workflow for reading scanner results.",
 }
 with st.container(border=True):
-    screen_picker, screen_summary = st.columns([1.05, 1.35], gap="large", vertical_alignment="center")
+    screen_picker, screen_summary = st.columns([1.05, 1.35], gap="small", vertical_alignment="center")
     with screen_picker:
         with st.container(key="screen-library-control"):
-            selected_screen = st.selectbox(
-                "🔎 Screen library · type to search",
-                list(SCREEN_LIBRARY),
-                key="screen_library",
-                help="Search and choose a scanner view. Screens are grouped by purpose.",
-            )
+            # Every screen is visible in the list, so typing is switched off (this also stops the
+            # on-screen keyboard from opening on phones). Older Streamlit lacks `filter_mode`.
+            library_args = dict(key="screen_library", help="Choose a scanner view. Screens are grouped by purpose.")
+            try:
+                selected_screen = st.selectbox("🗂️ Screen library", list(SCREEN_LIBRARY), filter_mode=None, **library_args)
+            except TypeError:
+                selected_screen = st.selectbox("🗂️ Screen library", list(SCREEN_LIBRARY), **library_args)
     active_screen = SCREEN_LIBRARY[selected_screen]
     if active_screen != "chart":
         # Chart candles and derived bases are discarded when the user leaves this view.

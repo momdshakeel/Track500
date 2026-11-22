@@ -125,6 +125,7 @@ div[data-testid="stSelectbox"] [data-baseweb="select"]>div{min-height:44px!impor
 @media (max-width:1100px) and (min-width:641px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (max-width:900px){.sub{max-width:100%}.kpis{gap:8px}}
 @media (max-width:640px){
+  .screen-info{min-height:0;padding:0 2px}
   .block-container{padding-top:2.8rem!important;padding-bottom:2rem!important;padding-left:.7rem!important;padding-right:.7rem!important}
   .hero{align-items:flex-start;gap:7px;margin-bottom:8px;padding:10px 10px;border-radius:12px}.title{font-size:clamp(1.28rem,5.2vw,1.6rem)}
   .sub{font-size:.76rem;line-height:1.32}.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:4px}
