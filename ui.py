@@ -544,7 +544,7 @@ color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
 .rsp .k{opacity:.6;margin-left:7px;margin-right:2px}
 #tb{display:flex;flex-direction:column;gap:4px}
 #bar,#chips{display:flex;align-items:center;gap:8px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
-@media(min-width:1000px){#tb{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 8px}#bar,#chips{display:contents}}
+@media(min-width:1000px){#tb{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 6px}#bar,#chips{display:contents}}
 #bar::-webkit-scrollbar,#chips::-webkit-scrollbar{display:none}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
 .seg button{border:0;background:transparent;color:inherit;font:inherit;font-weight:600;padding:5px 10px;cursor:pointer;min-width:34px}
@@ -553,9 +553,9 @@ color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
 #rng button.on{background:var(--soft);color:inherit;box-shadow:inset 0 -2px 0 var(--accent)}
 select{flex:none;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:600;padding:5px 8px}
 select option{color:#111;background:#fff}
-.chip{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
-background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 9px;cursor:pointer;opacity:.55}
-.chip i{width:14px;height:3px;border-radius:2px;background:var(--c)}
+.chip{flex:none;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;
+background:transparent;color:inherit;font:inherit;font-size:11px;padding:3px 7px;cursor:pointer;opacity:.55}
+.chip i{width:10px;height:3px;border-radius:2px;background:var(--c)}
 .chip i.b{height:9px;width:9px;border-radius:2px}
 .chip.on{opacity:1;background:var(--soft)}
 #wrap{position:relative;flex:1;min-height:240px}
@@ -577,8 +577,11 @@ background:transparent;color:inherit;font:inherit;font-size:11.5px;padding:3px 9
  <div class="seg" id="rng"></div>
 </div>
 <div id="chips">
- <button class="chip on" id="t_ema" style="--c:#111827" title="Exponential averages 10 (black) and 21 (gold)"><i></i>EMA 10 · 21</button>
- <button class="chip on" id="t_sma" style="--c:#2563eb" title="Simple averages 50 (blue) and 200 (red)"><i></i>SMA 50 · 200</button>
+ <button class="chip on" id="t_s10" style="--c:#2563eb" title="Simple moving average of the last 10 closes"><i></i>SMA 10</button>
+ <button class="chip on" id="t_s20" style="--c:#2563eb" title="Simple moving average of the last 20 closes"><i></i>SMA 20</button>
+ <button class="chip on" id="t_s50" style="--c:#2563eb" title="Simple moving average of the last 50 closes"><i></i>SMA 50</button>
+ <button class="chip on" id="t_s150" style="--c:#2563eb" title="Simple moving average of the last 150 closes"><i></i>SMA 150</button>
+ <button class="chip on" id="t_s200" style="--c:#2563eb" title="Simple moving average of the last 200 closes"><i></i>SMA 200</button>
  <button class="chip on" id="t_vol" style="--c:#10b981" title="Volume with its 50-day average"><i class="b"></i>Volume</button>
  <button class="chip on" id="t_rs" style="--c:#16a34a" title="Price relative to the benchmark index"><i></i>RS line</button>
  <button class="chip on" id="t_base" style="--c:#3b82f6" title="Detected bases, numbered oldest first"><i class="b"></i>Bases</button>
@@ -593,7 +596,8 @@ const I=P.info||null;
 const $=id=>document.getElementById(id);
 const SPANS={D:{'3M':63,'6M':126,'1Y':252,'2Y':504,'5Y':1260},W:{'3M':13,'6M':26,'1Y':52,'2Y':104,'5Y':260},M:{'3M':3,'6M':6,'1Y':12,'2Y':24,'5Y':60}};
 const RLIST=['3M','6M','1Y','2Y','5Y'],PERIOD={D:'day',W:'week',M:'month'};
-const on={ema:true,sma:true,vol:true,rs:true,base:true};
+const MAS=[10,20,50,150,200];
+const on={s10:true,s20:true,s50:true,s150:true,s200:true,vol:true,rs:true,base:true};
 let chart=null,tf='D',rng=RLIST.includes(P.range)?P.range:'1Y',data=P.bars,dark=false,rsBase=0,pal={};
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=v=>v==null?'–':Number(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -628,9 +632,9 @@ function readTheme(){
   r.setProperty('--line',a(.16));r.setProperty('--soft',a(.08));
   r.setProperty('--up',dark?'#34d399':'#16a34a');r.setProperty('--dn',dark?'#f87171':'#dc2626');
   pal={text:a(.78),grid:a(dark?.08:.06),line:a(.22),
-    ema10:dark?'#e5e7eb':'#111827',ema21:'#d4a017',sma50:'#3b82f6',sma200:dark?'#f87171':'#991b1b',
+    s10:dark?'#e5e7eb':'#111827',s20:'#d4a017',s50:'#3b82f6',s150:'#8b5cf6',s200:dark?'#f87171':'#991b1b',ema21:'#d4a017',
     up:'#22a06b',dn:'#e5484d'};
-  $('t_ema').style.setProperty('--c',pal.ema10);
+  MAS.forEach(n=>$('t_s'+n).style.setProperty('--c',pal['s'+n]));
   return pal;
 }
 const NARROW=()=>innerWidth<560;
@@ -677,15 +681,16 @@ const BLANK=()=>({name:'',calcParamsText:'',features:[],legends:[]});
 const paneOf=n=>{const i=chart.getIndicators({name:n})[0];return i&&i.paneId;};
 const sizePane=(n,h)=>{const id=paneOf(n);if(id)try{chart.setPaneOptions({id,height:h});}catch(e){}};
 const IND={
-  ema:()=>chart.createIndicator({name:'EMA',calcParams:[10,21],paneId:'candle_pane',createTooltipDataSource:BLANK,
-        styles:{lines:[{color:pal.ema10,size:1.2,style:'solid',smooth:false,dashedValue:[2,2]},{color:pal.ema21,size:1.2,style:'solid',smooth:false,dashedValue:[2,2]}]}},true),
-  sma:()=>chart.createIndicator({name:'MA',calcParams:[50,200],paneId:'candle_pane',createTooltipDataSource:BLANK,
-        styles:{lines:[{color:pal.sma50,size:1.4,style:'solid',smooth:false,dashedValue:[2,2]},{color:pal.sma200,size:1.4,style:'solid',smooth:false,dashedValue:[2,2]}]}},true),
   vol:()=>{chart.createIndicator({name:'VOL',calcParams:[50],createTooltipDataSource:BLANK,
         styles:{lines:[{color:pal.ema21,size:1.2,style:'solid',smooth:false,dashedValue:[2,2]}]}},false);sizePane('VOL',78);},
   rs:()=>{chart.createIndicator('MP_RS_LINE',false);sizePane('MP_RS_LINE',92);}
 };
-const DEL={ema:'EMA',sma:'MA',vol:'VOL',rs:'MP_RS_LINE'};
+const DEL={vol:'VOL',rs:'MP_RS_LINE'};
+MAS.forEach(n=>{
+  IND['s'+n]=()=>chart.createIndicator({id:'sma'+n,name:'MA',calcParams:[n],paneId:'candle_pane',createTooltipDataSource:BLANK,
+    styles:{lines:[{color:pal['s'+n],size:n>=150?1.5:1.2,style:'solid',smooth:false,dashedValue:[2,2]}]}},true);
+});
+const dropInd=k=>chart.removeIndicator(DEL[k]?{name:DEL[k]}:{id:'sma'+k.slice(1)});
 
 /* ---------- bases ---------- */
 const tsOf=s=>{const a=s.split('-').map(Number);return Date.UTC(a[0],a[1]-1,a[2])-330*60000};
@@ -776,7 +781,7 @@ function start(){
   chart=klinecharts.init('chart');chart.setTimezone('Asia/Kolkata');chart.setStyles(chartStyles());
   chart.setSymbol({ticker:P.symbol,pricePrecision:2,volumePrecision:0});chart.setPeriod({span:1,type:'day'});
   chart.setLocale('en-US');chart.setDataLoader({getBars:({callback})=>callback(data)});
-  ['ema','sma','vol','rs'].forEach(k=>IND[k]());
+  ['s10','s20','s50','s150','s200','vol','rs'].forEach(k=>IND[k]());
   chart.subscribeAction('onCrosshairChange',c=>{legend(c&&c.dataIndex!=null&&c.kLineData?c.dataIndex:undefined);});
   setTimeout(()=>{drawBases();setRange(rng);legend();},250);
   new ResizeObserver(()=>{chart.resize();setRange(rng);}).observe($('chart'));
@@ -798,10 +803,10 @@ function setType(v){
 $('ctype').onchange=e=>setType(e.target.value);
 $('zin').onclick=()=>{const b=chart.getBarSpace().bar;chart.setBarSpace(Math.min(50,b*1.3));document.querySelectorAll('#rng button').forEach(x=>x.classList.remove('on'));};
 $('zout').onclick=()=>{const b=chart.getBarSpace().bar;chart.setBarSpace(Math.max(1,b/1.3));document.querySelectorAll('#rng button').forEach(x=>x.classList.remove('on'));};
-['ema','sma','vol','rs','base'].forEach(k=>$('t_'+k).onclick=()=>{
+['s10','s20','s50','s150','s200','vol','rs','base'].forEach(k=>$('t_'+k).onclick=()=>{
   on[k]=!on[k];$('t_'+k).classList.toggle('on',on[k]);
   if(k==='base'){drawBases();return;}
-  try{if(on[k])IND[k]();else chart.removeIndicator({name:DEL[k]});}catch(e){}
+  try{if(on[k])IND[k]();else dropInd(k);}catch(e){}
   setTimeout(()=>setRange(rng),30);
 });
 document.querySelectorAll('#tf button').forEach(b=>b.classList.toggle('on',b.dataset.t===tf));
