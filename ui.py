@@ -561,12 +561,12 @@ background:transparent;color:inherit;font:inherit;font-size:11px;padding:3px 7px
 #wrap{position:relative;flex:1;min-height:240px}
 #chart{position:absolute;inset:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;touch-action:none}
 #lg{position:absolute;left:10px;top:7px;z-index:3;pointer-events:none;font-size:11.5px;line-height:1.5;max-width:calc(100% - 90px)}
-#lg .m{opacity:.6;margin-left:6px}#lg .m:first-child{margin-left:0}
+#lg .m{opacity:.6;margin-left:6px}#lg .dt{font-weight:600;margin-right:4px}
 #lg .hl{color:#2563eb;font-weight:600}
 #ft{font-size:10.5px;opacity:.6;text-align:right}
 .err{padding:16px;opacity:.75}
 @media(max-width:1149px){.sn{display:none}}
-@media(max-width:560px){.sym{font-size:20px}.px{font-size:21px}.co{font-size:13px}.sub,.asof,.long,.sn,#lg .hl{display:none}.seg button{padding:5px 8px;min-width:30px}#lg{font-size:10px;max-width:calc(100% - 70px)}#lg .m{margin-left:4px}.r{gap:6px}#hd{gap:4px}}
+@media(max-width:560px){.sym{font-size:20px}.px{font-size:21px}.co{font-size:13px}.sub,.asof,.long,.sn,#lg .hl,#lg .dt{display:none}.seg button{padding:5px 8px;min-width:30px}#lg{font-size:10px;max-width:calc(100% - 70px)}#lg .m{margin-left:4px}.r{gap:6px}#hd{gap:4px}}
 </style></head><body>
 <div id="hd"></div>
 <div id="tb">
@@ -717,7 +717,8 @@ function legend(i){
   const d=P.bars,n=Math.min(252,d.length);let hi=-1,lo=1e18;
   for(let j=d.length-n;j<d.length;j++){if(d[j].high>hi)hi=d[j].high;if(d[j].low<lo)lo=d[j].low;}
   const cl=d[d.length-1].close;
-  $('lg').innerHTML='<div><span class="m">O</span> '+fmt(k.open)+'<span class="m">H</span> '+fmt(k.high)+'<span class="m">L</span> '+fmt(k.low)+
+  const dt=k.date?new Date(k.date+'T00:00:00Z').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit',timeZone:'UTC'}):'';
+  $('lg').innerHTML='<div><span class="dt">'+dt+'</span><span class="m">O</span> '+fmt(k.open)+'<span class="m">H</span> '+fmt(k.high)+'<span class="m">L</span> '+fmt(k.low)+
     '<span class="m">C</span> '+fmt(k.close)+' <b class="'+c+'">'+sgn(chg,2)+'%</b></div>'+
     '<div class="hl">52w high '+fmt(hi).replace(/\.00$/,'')+' ('+sgn((cl/hi-1)*100,1)+'%) <span style="opacity:.6;font-weight:400">· low '+fmt(lo).replace(/\.00$/,'')+'</span></div>';
 }
@@ -782,7 +783,13 @@ function start(){
   chart.setSymbol({ticker:P.symbol,pricePrecision:2,volumePrecision:0});chart.setPeriod({span:1,type:'day'});
   chart.setLocale('en-US');chart.setDataLoader({getBars:({callback})=>callback(data)});
   ['s10','s20','s50','s150','s200','vol','rs'].forEach(k=>IND[k]());
-  chart.subscribeAction('onCrosshairChange',c=>{legend(c&&c.dataIndex!=null&&c.kLineData?c.dataIndex:undefined);});
+  chart.subscribeAction('onCrosshairChange',c=>{
+    if(!c||c.x==null){legend();return;}
+    let i;
+    try{const r=chart.convertFromPixel({x:c.x,y:c.y},{paneId:'candle_pane'});i=r&&r.dataIndex;}catch(e){}
+    legend(typeof i==='number'&&i>=0&&i<data.length?i:undefined);
+  });
+  $('chart').addEventListener('mouseleave',()=>legend());
   setTimeout(()=>{drawBases();setRange(rng);legend();},250);
   new ResizeObserver(()=>{chart.resize();setRange(rng);}).observe($('chart'));
 }
