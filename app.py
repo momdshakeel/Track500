@@ -54,7 +54,7 @@ slot_tabs = st.container()
 slot_view = st.container()
 with slot_view:
     with st.container(key="view-row"):
-        v_title, v_filters, v_columns = st.columns([6, 1.2, 2], gap="small", vertical_alignment="center")
+        v_title, v_view, v_filters, v_columns = st.columns([5, 1.7, 1.2, 1.9], gap="small", vertical_alignment="center")
 
 
 _view_row_columns = {"used": False}   # only the first table on a screen takes the button in the view row
@@ -537,9 +537,7 @@ def stock_strength_map(frame, key):
 
 def show(frame, name, text, keys=None, sort=("RS_Rating", -1), titles=None, scan_date=None,
          history_dates=None, history_key=None):
-    note_col, view_col = st.columns([5, 1.7], gap="small", vertical_alignment="center")
-    with note_col:
-        ui.note(f"<b>{len(frame)}</b> stocks · {text}")
+    _set_view_note(text, len(frame))
     if custom_rules:
         rule_labels = []
         for field, operator, lower_or_value, upper in custom_rules:
@@ -549,7 +547,7 @@ def show(frame, name, text, keys=None, sort=("RS_Rating", -1), titles=None, scan
                 else f"{label} {'≥' if operator == 'At least' else '≤'} {lower_or_value:g}"
             )
         st.caption("Custom conditions (AND): " + " · ".join(rule_labels))
-    with view_col:
+    with v_view:
         view = st.segmented_control("View", ["List", "Strength map"], default="List",
                                     key=f"result_view_{name}", label_visibility="collapsed")
     if view == "Strength map":
@@ -671,8 +669,8 @@ def rotation_chart(rotation, group_title):
 
 def show_breadth_and_sectors():
     b = m.market_breadth(result)
-    ui.note(f"Every figure on this tab uses <b>liquid stocks only</b> ({LIQ_TEXT}): "
-            f"<b>{b['stocks']}</b> of {len(result)} rated stocks. Stock filters don't apply here.")
+    _set_view_note(f"Every figure on this tab uses <b>liquid stocks only</b> ({LIQ_TEXT}): "
+                   f"<b>{b['stocks']}</b> of {len(result)} rated stocks. Stock filters don't apply here.")
     ui.adv_dec(b["advancers"], b["decliners"], b["unchanged"])
     ui.kpis([
         ("52-week highs", b["new_52w_highs"], "closing basis", "#10b981"),
@@ -1192,9 +1190,24 @@ active_screen = SCREEN_TABS[selected_screen]
 if active_screen != "chart":
     # Chart candles and derived bases are discarded when the user leaves this view.
     st.session_state.pop("chart_explorer_data", None)
-with v_title:
-    st.markdown(f'<div class="viewhead"><b>{selected_screen}</b><span>{SCREEN_DESCRIPTIONS[active_screen]}</span></div>',
-                unsafe_allow_html=True)
+view_title_slot = v_title.empty()
+
+
+def _set_view_note(note: str = "", count=None) -> None:
+    """Title row: view name + short description, plus an (i) that shows how the view works on click/hover."""
+    info = ""
+    if note:
+        paragraphs = note if isinstance(note, (list, tuple)) else [note]
+        body = "".join(f'<span class="ln">{p}</span>' for p in paragraphs)
+        found = f'<span class="ln"><b>{count}</b> stocks currently match.</span>' if count is not None else ""
+        info = (f'<span class="i" tabindex="0">i<span class="tip"><span class="th">{selected_screen} · how it works</span>'
+                f'{body}{found}</span></span>')
+    view_title_slot.markdown(
+        f'<div class="viewhead"><b>{selected_screen}</b><span class="vd">{SCREEN_DESCRIPTIONS[active_screen]}</span>{info}</div>',
+        unsafe_allow_html=True)
+
+
+_set_view_note()
 
 requested_chart_symbol = st.session_state.get("_symbol_chart_request")
 if requested_chart_symbol:
@@ -1208,8 +1221,19 @@ if active_screen == "top":
     show(top, "top_picks", f"Passes all 8 Trend Template conditions, <b>RS ≥ {pref_rs}</b>, RS line within 5% "
                            f"of its 52-week high and <b>RSI &gt; {rsi_min}</b>.")
 elif active_screen == "momentum":
-    st.markdown("### ✨ Momentum Leader")
-    st.caption("A rule-based shortlist for chart review. It does not confirm a breakout or issue a trade signal.")
+    _set_view_note([
+        "A rule-based shortlist for chart review. It does not confirm a breakout or issue a trade signal.",
+        "<b>1. Market gate:</b> the scan benchmark (Nifty 500; Nifty 50 fallback) closes above its 10-day and 20-day "
+        "averages. This is an end-of-day check. If either fails, the candidate list is paused.",
+        "<b>2. Near the high:</b> within 25% of the 52-week closing high.",
+        "<b>3. Above the 50-day average:</b> price is at or above its 50-day SMA.",
+        "<b>4. Base:</b> detected base depth is 20% or less, and price is 0–10% below its pivot.",
+        "<b>5. RS line:</b> within 5% of its 52-week high.",
+        "<b>Review the chart before keeping a name:</b> check for a first leg of roughly 40% or more, with stronger up "
+        "candles, above-average volume and little hesitation; a tight base that holds the 10- and 20-day averages "
+        "without a large down day or heavy-volume rejection; and smooth, constructive price action. These "
+        "chart-quality checks are not calculated by this screen. The breakout is the final live check.",
+    ], len(momentum_candidates) if momentum_ready and momentum_market_ok else None)
     if not momentum_ready:
         st.warning("This deployment’s saved scan does not include the market trend gate yet. Push the code, then run **Daily scan** once to regenerate data.")
     else:
@@ -1219,23 +1243,7 @@ elif active_screen == "momentum":
             st.success("Market gate passed: the scan benchmark is above both its 10-day and 20-day averages.")
         else:
             st.warning("Market gate failed: the scan benchmark is below its 10-day or 20-day average. New candidates are paused.")
-        st.caption("Market gate uses the scanner benchmark for RS (Nifty 500; Nifty 50 fallback). It is an end-of-day check.")
-        with st.expander("How this shortlist is filtered", expanded=True):
-            st.markdown(
-                "1. **Market gate:** benchmark close above its 10-day and 20-day averages. "
-                "If either fails, the candidate list is paused.\n"
-                "2. **Near the high:** within 25% of the 52-week closing high.\n"
-                "3. **Above the 50-day average:** price must be at or above its 50-day SMA.\n"
-                "4. **Base:** detected base depth must be 20% or less; price must be 0–10% below its pivot.\n"
-                "5. **RS line:** within 5% of its 52-week high.\n\n"
-                "**Review the chart before keeping a name:** check for a first leg of roughly 40% or more, with "
-                "stronger up candles, above-average volume and little hesitation; a tight base that holds the "
-                "10- and 20-day averages without a large down day or heavy-volume rejection; and smooth, "
-                "constructive price action. These chart-quality checks are not calculated by this screen. "
-                "The breakout is the final live check."
-            )
         if momentum_market_ok:
-            st.markdown(f"**{len(momentum_candidates)} candidates** · closest to pivot first")
             defaults = ["Symbol", "RS_Rating", "Pct_To_Pivot", "Pct_From_52W_High",
                         "Pct_Above_50SMA", "Base_Depth_%", "Chg_1D_%", "RS_Line_New_High",
                         "RS_Line_Near_High", "Up_Down_Vol_Ratio_20D", "Sector"]
