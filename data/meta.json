@@ -1,10 +1,10 @@
 {
-  "as_of": "2026-11-23",
-  "generated_at": "2026-11-24T17:58:43+05:30",
+  "as_of": "2026-11-25",
+  "generated_at": "2026-11-25T18:03:00+05:30",
   "rated": 724,
-  "liquid": 673,
+  "liquid": 672,
   "universe": 750,
-  "prices": 749,
+  "prices": 748,
   "market_cap_known": 724,
-  "seconds": 50
+  "seconds": 42
 }
